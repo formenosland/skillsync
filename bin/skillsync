@@ -341,14 +341,11 @@ registry_rows() {
 is_skill_dir() { [ -f "$1/SKILL.md" ]; }
 
 # Agent Skills name: 1–64 chars, /^[a-z0-9]+(-[a-z0-9]+)*$/ (spec).
+# Match under LC_ALL=C — locale-aware [a-z] ranges can include A-Z (macOS CI).
 is_safe_skill_name() {
-	_n=$1
-	[ -n "$_n" ] || return 1
-	[ "${#_n}" -le 64 ] || return 1
-	case $_n in
-		*[!a-z0-9-]* | -* | *- | *--*) return 1 ;;
-	esac
-	return 0
+	[ -n "$1" ] || return 1
+	[ "${#1}" -le 64 ] || return 1
+	printf '%s\n' "$1" | LC_ALL=C grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$'
 }
 
 # Frontmatter name: if set, else directory basename. Empty when neither is safe.

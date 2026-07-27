@@ -265,7 +265,14 @@ mkdir -p "$T/src-upper/skills/CodeReview"
 printf -- '---\nname: CodeReview\ndescription: upper\n---\nbody\n' \
 	>"$T/src-upper/skills/CodeReview/SKILL.md"
 s add "$T/src-upper" >/dev/null 2>&1
-check "uppercase skill name not materialized" test ! -e "$T/sync/store/CodeReview"
+# Exact basename match (avoid case-insensitive -e false positives on macOS).
+check "uppercase skill name not materialized" sh -c '
+	for f in "$1"/*; do
+		{ [ -e "$f" ] || [ -L "$f" ]; } || continue
+		[ "$(basename "$f")" = CodeReview ] && exit 1
+	done
+	exit 0
+' sh "$T/sync/store"
 
 mkdir -p "$T/src-kebab/skills/code-review"
 make_skill "$T/src-kebab/skills/code-review" code-review

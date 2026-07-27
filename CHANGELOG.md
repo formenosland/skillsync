@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
-- Reject unsafe skill names per Agent Skills spec (`^[a-z0-9]+(-[a-z0-9]+)*$`, ≤64 chars) during discovery, materialize, and remove.
+- Reject unsafe skill names per Agent Skills spec (`^[a-z0-9]+(-[a-z0-9]+)*$`, ≤64 chars) during discovery, materialize, and remove (locale-safe via `LC_ALL=C`).
 - Confine git clone paths under `sources/` and reject `..` in URL-derived paths.
 - Non-interactive pickers no longer auto-select all without `--yes`; bare `remove` requires names or `--all` when not on a tty.
 - `sync` pulls every manifested git source (not only the last entry).
