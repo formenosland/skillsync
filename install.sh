@@ -134,8 +134,9 @@ install_from_git() {
 		git clone --depth 1 --branch "$REF" "$REPO" "$APP_DIR" 2>/dev/null ||
 			git clone --depth 1 "$REPO" "$APP_DIR"
 		if [ "$REF" != "main" ] && [ "$REF" != "master" ]; then
-			git -C "$APP_DIR" fetch --depth 1 origin "$REF" &&
+			if git -C "$APP_DIR" fetch --depth 1 origin "$REF"; then
 				git -C "$APP_DIR" checkout "$REF" 2>/dev/null || true
+			fi
 		fi
 	fi
 }

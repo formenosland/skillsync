@@ -70,11 +70,14 @@ say "== static checks"
 check "bin/skillsync parses" sh -n "$SKILLSYNC"
 check "install.sh parses" sh -n "$ROOT/install.sh"
 check "generate.sh parses" sh -n "$ROOT/registry/generate.sh"
-if command -v shellcheck >/dev/null 2>&1; then
-	check "shellcheck clean" shellcheck -s sh "$SKILLSYNC" "$ROOT/install.sh" "$ROOT/registry/generate.sh" "$0"
-else
-	say "  skip: shellcheck not installed"
+# Version pin matches Makefile / CI (SHELLCHECK_VERSION).
+_sc_want="${SHELLCHECK_VERSION:-0.11.0}"
+if ! command -v shellcheck >/dev/null 2>&1; then
+	fail "shellcheck ${_sc_want} required (brew install shellcheck)"
 fi
+_sc_have=$(shellcheck --version | awk '/^version:/{print $2; exit}')
+[ "$_sc_have" = "$_sc_want" ] || fail "shellcheck ${_sc_have}, want ${_sc_want}"
+check "shellcheck clean" shellcheck "$SKILLSYNC" "$ROOT/install.sh" "$ROOT/registry/generate.sh" "$0"
 check "registry has data rows" sh -c "grep -cv '^#\\|^agent_id' '$ROOT/registry/agents.tsv' | grep -q '[0-9]'"
 
 # --- 1. init: migration, views, install detection ------------------------------

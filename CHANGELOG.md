@@ -20,10 +20,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `remove --all` to drop every installed skill in one shot.
 - `Makefile` targets: `test`, `shellcheck`, `install`, `uninstall`.
 - Deny-by-default `.gitignore` (explicit includes only).
+- ShellCheck v0.11.0 pin via Makefile/CI + native `.shellcheckrc` (no custom runner).
 
 ### Changed
 
 - OSS scaffolding: CI workflow, `.editorconfig`, `.gitignore`, `SECURITY.md`; docs aligned with CLI behavior.
+- Replaced transitional `HANDOVER.md` with root [AGENTS.md](AGENTS.md) as the single coding-agent entrypoint; operator guidance remains in `skill/SKILL.md`.
 
 ## [0.2.0] - 2026-07-25
 

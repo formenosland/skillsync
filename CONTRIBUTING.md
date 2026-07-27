@@ -2,24 +2,29 @@
 
 Thanks for helping unify agent skills. This project values small, reviewable changes with tests.
 
+**Coding agents:** follow [AGENTS.md](AGENTS.md) (setup, invariants, commands, boundaries).
+
 ## Development setup
 
-No build step. You need `sh`, `git`, `shellcheck`, and `awk`.
+No build step. You need `sh`, `git`, `awk`, and **ShellCheck v0.11.0** (same pin as CI).
 
 ```sh
 git clone https://github.com/formenosland/skillsync.git
 cd skillsync
-make test                     # or: tests/run.sh
-./bin/skillsync help          # run straight from the checkout
+brew install shellcheck        # or your package manager — must be v0.11.0
+make test                      # or: tests/run.sh
+./bin/skillsync help
 ```
 
 Convenience targets: `make test`, `make shellcheck`, `make install`, `make uninstall`.
+
+Lint rules: [`.shellcheckrc`](.shellcheckrc) (native ShellCheck config). Version pin: `SHELLCHECK_VERSION` in the [Makefile](Makefile) and [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — bump both together.
 
 ## Code style
 
 - **POSIX sh only** — no bashisms. Everything must run under `sh` (dash, macOS `/bin/sh`, busybox).
 - Tabs for indentation in shell scripts.
-- `shellcheck -s sh` must pass on `bin/skillsync`, `install.sh`, and `registry/generate.sh`. Intentional idiom exceptions are declared with file-level `# shellcheck disable=` directives and a comment explaining why.
+- `make shellcheck` must pass (ShellCheck v0.11.0 + `.shellcheckrc`). Intentional idiom exceptions use file-level `# shellcheck disable=` with a reason comment.
 - Keep the ownership invariant sacred: *skillsync owns the store; humans own sources.* No code path may delete skill files — only symlinks we created. Anything replaced (not removed) is backed up first.
 - User-facing output goes through the `ui_*` helpers so it degrades correctly (non-tty, `NO_COLOR`, `TERM=dumb`). Machine output (`list`, `completion`) goes to stdout, plain.
 

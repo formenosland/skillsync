@@ -163,8 +163,9 @@ The [vercel `skills` CLI](https://github.com/vercel-labs/skills) (`npx skills ad
 
 ## Documentation
 
-- [Design & Specification](docs/DESIGN.md) — the full architecture, precedence rules, and vendor guidance
-- [Agent Skill](skill/SKILL.md) — teach your agent to operate skillsync conversationally
+- [AGENTS.md](AGENTS.md) — instructions for coding agents working in this repo
+- [Design & Specification](docs/DESIGN.md) — architecture, precedence rules, and vendor guidance
+- [Agent Skill](skill/SKILL.md) — teach your agent to *operate* the skillsync CLI (not to change this repo)
 - [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## License

@@ -1,0 +1,10 @@
+# Native ShellCheck project config (auto-loaded from the repo root).
+# https://www.shellcheck.net/wiki/Directive
+#
+# Version pin lives in Makefile / CI (SHELLCHECK_VERSION), not here.
+
+shell=sh
+
+# Optional checks with good signal on this codebase.
+# Skipped as noisy: check-set-e-suppressed, check-extra-masked-returns, add-default-case
+enable=deprecate-which
