@@ -1,0 +1,20 @@
+# Exclude All
+/*
+
+# Explicit includes
+!.github/
+!bin/
+!docs/
+!registry/
+!skill/
+!tests/
+!.editorconfig
+!.gitignore
+!CHANGELOG.md
+!CODE_OF_CONDUCT.md
+!CONTRIBUTING.md
+!install.sh
+!LICENSE
+!Makefile
+!README.md
+!SECURITY.md

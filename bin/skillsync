@@ -1,0 +1,1331 @@
+#!/bin/sh
+# skillsync — unified AI agent skill installation.
+#
+# One store, many views: skills live in a single canonical store; every
+# agent's skills directory is a symlink (view) into it.
+#
+# Invariant: skillsync owns the store; humans own sources. The store only
+# ever contains symlinks created by skillsync. Anything else is unmanaged
+# and never touched.
+#
+# POSIX sh. Requires: git, ln, standard coreutils.
+#
+# shellcheck disable=SC1007,SC2016,SC2088,SC1003
+# (intentional: `CDPATH= cd` idiom; literal ~ and ${ in case patterns.)
+
+set -e
+
+VERSION="0.2.0"
+
+# --- locations (XDG base dirs; SKILLSYNC_HOME forces a single root) ----------
+
+# Resolve this script's directory (follow symlinks — e.g. ~/.local/bin/skillsync).
+_script=$0
+while [ -L "$_script" ]; do
+	_target=$(readlink "$_script") || break
+	case $_target in
+		/*) _script=$_target ;;
+		*) _script=$(CDPATH= cd -- "$(dirname "$_script")" && pwd)/$_target ;;
+	esac
+done
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$_script")" && pwd)
+
+if [ -n "${SKILLSYNC_HOME:-}" ]; then
+	CONFIG_DIR="$SKILLSYNC_HOME"
+	DATA_DIR="$SKILLSYNC_HOME"
+else
+	CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/skillsync"
+	DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/skillsync"
+fi
+
+STORE="$DATA_DIR/store"
+SOURCES_DIR="$DATA_DIR/sources"
+BACKUPS_DIR="$DATA_DIR/backups"
+LOCAL_SOURCE="$SOURCES_DIR/local"
+MANIFEST="$CONFIG_DIR/sources.conf"
+EXCLUDES="$CONFIG_DIR/exclude.conf"
+REGISTRY="${SKILLSYNC_REGISTRY:-$SCRIPT_DIR/../registry/agents.tsv}"
+LOCAL_REGISTRY="$CONFIG_DIR/agents.local.tsv"
+
+DRY_RUN=0
+YES=0
+USE_COPY=0
+TAB=$(printf '\t')
+
+# --- ui -----------------------------------------------------------------------
+
+# Colors and symbols degrade automatically: no tty on stderr, NO_COLOR set,
+# or TERM=dumb -> plain ASCII, no escapes.
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
+	C_RESET=$(printf '\033[0m')
+	C_BOLD=$(printf '\033[1m')
+	C_DIM=$(printf '\033[2m')
+	C_RED=$(printf '\033[31m')
+	C_GREEN=$(printf '\033[32m')
+	C_YELLOW=$(printf '\033[33m')
+	C_CYAN=$(printf '\033[36m')
+	S_STEP="◆" S_OK="✓" S_WARN="▲" S_ERR="✗" S_BAR="│" S_END="└"
+	FANCY=1
+else
+	C_RESET="" C_BOLD="" C_DIM="" C_RED="" C_GREEN="" C_YELLOW="" C_CYAN=""
+	S_STEP="*" S_OK="+" S_WARN="!" S_ERR="x" S_BAR="|" S_END="\`"
+	FANCY=0
+fi
+
+N_OK=0
+N_WARN=0
+
+ui_header() {
+	printf '%s\n' "${C_CYAN}${S_STEP}${C_RESET} ${C_BOLD}$*${C_RESET}" >&2
+}
+
+ui_ok() {
+	N_OK=$((N_OK + 1))
+	printf '%s\n' "${C_DIM}${S_BAR}${C_RESET} ${C_GREEN}${S_OK}${C_RESET} $*" >&2
+}
+
+ui_info() {
+	printf '%s\n' "${C_DIM}${S_BAR}${C_RESET} ${C_DIM}$*${C_RESET}" >&2
+}
+
+ui_warn() {
+	N_WARN=$((N_WARN + 1))
+	printf '%s\n' "${C_DIM}${S_BAR}${C_RESET} ${C_YELLOW}${S_WARN} $*${C_RESET}" >&2
+}
+
+ui_err() {
+	printf '%s\n' "${C_DIM}${S_BAR}${C_RESET} ${C_RED}${S_ERR} $*${C_RESET}" >&2
+}
+
+ui_end() {
+	printf '%s\n' "${C_DIM}${S_END}${C_RESET} $*" >&2
+}
+
+die() {
+	ui_err "$@"
+	exit 1
+}
+
+# Run a command with a spinner (tty only). Usage: spin "label" cmd args...
+spin() {
+	_label=$1
+	shift
+	if [ "$DRY_RUN" -eq 1 ]; then
+		ui_info "[dry-run] $_label: $*"
+		return 0
+	fi
+	_out=$(mktemp)
+	if [ "$FANCY" -eq 1 ]; then
+		"$@" >"$_out" 2>&1 &
+		_pid=$!
+		_frames='|/-\'
+		_i=0
+		while kill -0 "$_pid" 2>/dev/null; do
+			_i=$(( (_i + 1) % 4 ))
+			_f=$(printf '%s' "$_frames" | cut -c$((_i + 1)))
+			printf '\r%s %s %s ' "${C_DIM}${S_BAR}${C_RESET}" "${C_CYAN}${_f}${C_RESET}" "$_label" >&2
+			sleep 0.1
+		done
+		printf '\r\033[K' >&2
+		if wait "$_pid"; then
+			rm -f "$_out"
+			return 0
+		fi
+	else
+		if "$@" >"$_out" 2>&1; then
+			rm -f "$_out"
+			return 0
+		fi
+	fi
+	ui_err "$_label failed:"
+	sed 's/^/    /' "$_out" >&2
+	rm -f "$_out"
+	return 1
+}
+
+# Multi-select picker. Args: prompt, candidates (one per line on stdin).
+# Prints selected lines on stdout. --yes selects everything; non-tty selects none.
+pick_multi() {
+	_prompt=$1
+	_items=$(cat)
+	[ -n "$_items" ] || return 0
+	if [ "$YES" -eq 1 ]; then
+		printf '%s\n' "$_items"
+		return 0
+	fi
+	if ! [ -t 0 ] || ! [ -t 2 ]; then
+		return 0
+	fi
+	printf '%s\n' "${C_DIM}${S_BAR}${C_RESET} ${C_BOLD}${_prompt}${C_RESET}" >&2
+	_n=0
+	printf '%s\n' "$_items" | while IFS= read -r _it; do
+		_n=$((_n + 1))
+		printf '%s\n' "${C_DIM}${S_BAR}${C_RESET}   ${C_CYAN}${_n}${C_RESET}) $_it" >&2
+	done
+	printf '%s ' "${C_DIM}${S_BAR}${C_RESET} numbers (space-separated), or ${C_BOLD}all${C_RESET}:" >&2
+	read -r _sel || _sel="all"
+	[ -n "$_sel" ] || _sel="all"
+	if [ "$_sel" = "all" ] || [ "$_sel" = "a" ]; then
+		printf '%s\n' "$_items"
+		return 0
+	fi
+	for _num in $_sel; do
+		case $_num in
+			*[!0-9]*) continue ;;
+		esac
+		printf '%s\n' "$_items" | sed -n "${_num}p"
+	done
+}
+
+# Interactive y/N (unused by commands today; install.sh has its own).
+confirm() {
+	_msg=$1
+	if [ "$YES" -eq 1 ] || [ "$DRY_RUN" -eq 1 ]; then
+		return 0
+	fi
+	if ! [ -t 0 ]; then
+		return 1
+	fi
+	printf '%s %s [y/N] ' "${C_DIM}${S_BAR}${C_RESET}" "$_msg" >&2
+	read -r _ans || _ans=""
+	case $_ans in
+		y | Y | yes | YES) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# Require typing $_word (e.g. nuke). --yes and --dry-run skip the prompt.
+confirm_typed() {
+	_word=$1
+	_msg=$2
+	if [ "$DRY_RUN" -eq 1 ]; then
+		return 0
+	fi
+	if [ "$YES" -eq 1 ]; then
+		return 0
+	fi
+	if ! [ -t 0 ]; then
+		return 1
+	fi
+	printf '%s %s\n' "${C_DIM}${S_BAR}${C_RESET}" "${C_RED}${_msg}${C_RESET}" >&2
+	printf '%s type %s%s%s to continue: ' "${C_DIM}${S_BAR}${C_RESET}" "$C_BOLD" "$_word" "$C_RESET" >&2
+	read -r _ans || _ans=""
+	[ "$_ans" = "$_word" ]
+}
+
+# Run "$@" or log it under --dry-run (no side effects).
+run() {
+	if [ "$DRY_RUN" -eq 1 ]; then
+		ui_info "[dry-run] $*"
+	else
+		"$@"
+	fi
+}
+
+# --- path helpers --------------------------------------------------------------
+
+# Expand a registry path: ${VAR:-default} substitution, then ~, then
+# | -separated alternates (first whose parent dir exists, else first).
+expand_agent_path() {
+	_raw=$1
+	_first=""
+	_result=""
+	_old_ifs=$IFS
+	IFS='|'
+	for _alt in $_raw; do
+		IFS=$_old_ifs
+		_p=$(expand_one_path "$_alt")
+		[ -n "$_first" ] || _first=$_p
+		if [ -z "$_result" ] && [ -d "$(dirname "$_p")" ]; then
+			_result=$_p
+		fi
+		IFS='|'
+	done
+	IFS=$_old_ifs
+	printf '%s' "${_result:-$_first}"
+}
+
+expand_one_path() {
+	_p=$1
+	case $_p in
+		'${'*'}'*)
+			_inner=${_p#'${'}
+			_varpart=${_inner%%\}*}
+			_suffix=${_inner#*\}}
+			_var=${_varpart%%:-*}
+			_def=${_varpart#*:-}
+			case $_var in
+				*[!A-Z0-9_]*) ;; # not a valid var name; leave as-is
+				*)
+					eval "_val=\${$_var:-}"
+					if [ -n "$_val" ]; then
+						_p="$_val$_suffix"
+					else
+						_p="$_def$_suffix"
+					fi
+					;;
+			esac
+			;;
+	esac
+	case $_p in
+		"~") _p=$HOME ;;
+		"~/"*) _p="$HOME${_p#\~}" ;;
+	esac
+	printf '%s' "$_p"
+}
+
+# Physical directory of $1 (pwd -P); fails if missing.
+resolve_dir() {
+	CDPATH= cd -- "$1" 2>/dev/null && pwd -P
+}
+
+is_symlink() { [ -L "$1" ]; }
+is_real_dir() { [ -d "$1" ] && ! [ -L "$1" ]; }
+
+# Compare paths after resolving symlinks (handles macOS /tmp vs /private/tmp).
+paths_equal() {
+	_a=$(resolve_dir "$1") || _a=$1
+	_b=$(resolve_dir "$2") || _b=$2
+	[ "$_a" = "$_b" ]
+}
+
+timestamp() { date +%Y%m%d-%H%M%S; }
+
+# Unique backup folder under BACKUPS_DIR (adds -N if the second collides).
+new_backup_dir() {
+	_base="$BACKUPS_DIR/$(timestamp)"
+	_bp=$_base
+	_n=0
+	while [ -e "$_bp" ]; do
+		_n=$((_n + 1))
+		_bp="$_base-$_n"
+	done
+	run mkdir -p "$_bp"
+	printf '%s' "$_bp"
+}
+
+# --- registry -------------------------------------------------------------------
+
+# Merged registry rows (local overrides shipped, by agent_id).
+# Output: agent_id<TAB>display_name<TAB>global_path<TAB>project_path
+registry_rows() {
+	[ -f "$REGISTRY" ] || die "registry not found: $REGISTRY"
+	if [ -f "$LOCAL_REGISTRY" ]; then
+		awk -F '\t' '
+			FNR == NR {
+				if ($0 ~ /^[ \t]*#/ || $0 ~ /^[ \t]*$/ || $1 == "agent_id") next
+				override[$1] = $0
+				order[++n] = $1
+				next
+			}
+			{
+				if ($0 ~ /^[ \t]*#/ || $0 ~ /^[ \t]*$/ || $1 == "agent_id") next
+				if ($1 in override) { print override[$1]; delete override[$1]; next }
+				print
+			}
+			END {
+				for (i = 1; i <= n; i++)
+					if (order[i] in override) print override[order[i]]
+			}
+		' "$LOCAL_REGISTRY" "$REGISTRY"
+	else
+		awk -F '\t' '{
+			if ($0 ~ /^[ \t]*#/ || $0 ~ /^[ \t]*$/ || $1 == "agent_id") next
+			print
+		}' "$REGISTRY"
+	fi
+}
+
+# --- skills & manifest ------------------------------------------------------------
+
+is_skill_dir() { [ -f "$1/SKILL.md" ]; }
+
+# Agent Skills name: 1–64 chars, /^[a-z0-9]+(-[a-z0-9]+)*$/ (spec).
+is_safe_skill_name() {
+	_n=$1
+	[ -n "$_n" ] || return 1
+	[ "${#_n}" -le 64 ] || return 1
+	case $_n in
+		*[!a-z0-9-]* | -* | *- | *--*) return 1 ;;
+	esac
+	return 0
+}
+
+# Frontmatter name: if set, else directory basename. Empty when neither is safe.
+get_skill_name() {
+	_dir=$1
+	_name=""
+	if [ -f "$_dir/SKILL.md" ]; then
+		_name=$(sed -n '/^---$/,/^---$/p' "$_dir/SKILL.md" 2>/dev/null |
+			grep '^name:' | head -1 |
+			sed 's/^name:[[:space:]]*//; s/^["'\'']//; s/["'\'']$//' | tr -d '\r')
+	fi
+	if [ -n "$_name" ] && is_safe_skill_name "$_name"; then
+		printf '%s' "$_name"
+		return 0
+	fi
+	_bn=$(basename "$_dir")
+	if is_safe_skill_name "$_bn"; then
+		printf '%s' "$_bn"
+	else
+		printf ''
+	fi
+}
+
+# Find skill dirs under a source root (depth 1, depth 2, and skills/ container).
+# Output: dir<TAB>name
+find_skills_in_source() {
+	_root=$1
+	[ -d "$_root" ] || return 0
+	if [ -d "$_root/skills" ]; then
+		for _d in "$_root/skills"/*; do
+			[ -d "$_d" ] || continue
+			if is_skill_dir "$_d"; then
+				_nm=$(get_skill_name "$_d")
+				[ -n "$_nm" ] || continue
+				printf '%s\t%s\n' "$_d" "$_nm"
+			fi
+		done
+	fi
+	for _d in "$_root"/*; do
+		[ -d "$_d" ] || continue
+		_b=$(basename "$_d")
+		[ "$_b" = "skills" ] && continue
+		[ "$_b" = ".git" ] && continue
+		if is_skill_dir "$_d"; then
+			_nm=$(get_skill_name "$_d")
+			[ -n "$_nm" ] || continue
+			printf '%s\t%s\n' "$_d" "$_nm"
+			continue
+		fi
+		for _d2 in "$_d"/*; do
+			[ -d "$_d2" ] || continue
+			if is_skill_dir "$_d2"; then
+				_nm=$(get_skill_name "$_d2")
+				[ -n "$_nm" ] || continue
+				printf '%s\t%s\n' "$_d2" "$_nm"
+			fi
+		done
+	done
+}
+
+manifest_entries() {
+	[ -f "$MANIFEST" ] || return 0
+	grep -v '^[[:space:]]*#' "$MANIFEST" 2>/dev/null | grep -v '^[[:space:]]*$' || true
+}
+
+manifest_append() {
+	_layer=$1
+	_src=$2
+	if [ -f "$MANIFEST" ] && grep -qF "$_layer $_src" "$MANIFEST" 2>/dev/null; then
+		return 0
+	fi
+	if [ "$DRY_RUN" -eq 1 ]; then
+		ui_info "[dry-run] append to manifest: $_layer $_src"
+	else
+		mkdir -p "$CONFIG_DIR"
+		printf '%s %s\n' "$_layer" "$_src" >>"$MANIFEST"
+	fi
+}
+
+is_excluded() {
+	[ -f "$EXCLUDES" ] || return 1
+	grep -qxF "$1" "$EXCLUDES" 2>/dev/null
+}
+
+# Record a removed skill so sync will not re-link it.
+exclude_add() {
+	is_safe_skill_name "$1" || return 0
+	is_excluded "$1" && return 0
+	if [ "$DRY_RUN" -eq 1 ]; then
+		ui_info "[dry-run] add '$1' to $EXCLUDES"
+	else
+		mkdir -p "$CONFIG_DIR"
+		printf '%s\n' "$1" >>"$EXCLUDES"
+	fi
+}
+
+exclude_del() {
+	[ -f "$EXCLUDES" ] || return 0
+	if [ "$DRY_RUN" -eq 1 ]; then
+		ui_info "[dry-run] drop '$1' from $EXCLUDES"
+	else
+		grep -vxF "$1" "$EXCLUDES" >"$EXCLUDES.tmp" || true
+		mv "$EXCLUDES.tmp" "$EXCLUDES"
+	fi
+}
+
+# --- sources ----------------------------------------------------------------------
+
+# True if any path segment of $1 is "..".
+path_has_dotdot_segment() {
+	_p=$1
+	case $_p in
+		..|../*|*/..|*/../*) return 0 ;;
+	esac
+	_old_ifs=$IFS
+	IFS='/'
+	for _seg in $_p; do
+		IFS=$_old_ifs
+		[ "$_seg" = ".." ] && return 0
+		IFS='/'
+	done
+	IFS=$_old_ifs
+	return 1
+}
+
+# True when $1 resolves inside SOURCES_DIR (rejects .. and prefix escapes).
+assert_under_sources() {
+	_cp=$1
+	# Reject .. before resolve: non-existent paths won't expand, and a
+	# string prefix check on unresolved ".../sources/foo/../.." is unsafe.
+	path_has_dotdot_segment "$_cp" && return 1
+	_base=$(resolve_dir "$SOURCES_DIR") || _base=$SOURCES_DIR
+	case $_base in
+		*/) ;;
+		*) _base="$_base/" ;;
+	esac
+	_res=$(resolve_dir "$_cp" 2>/dev/null) || _res=$_cp
+	case $_res in
+		"$_base"*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+is_git_url() {
+	case $1 in
+		http://* | https://* | git@* | ssh://*) return 0 ;;
+		/* | ./* | ../* | "~/"* | "~") return 1 ;;
+		*/*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+normalize_git_url() {
+	case $1 in
+		http://* | https://* | git@* | ssh://*) printf '%s' "$1" ;;
+		*/*) printf 'https://github.com/%s' "$1" ;;
+		*) printf '%s' "$1" ;;
+	esac
+}
+
+# Map a source URL/path to its on-disk location (clone under SOURCES_DIR, or local path).
+source_clone_path() {
+	_url=$1
+	case $_url in
+		http://* | https://*)
+			_p=$(printf '%s' "$_url" | sed 's#^https\{0,1\}://##; s#\.git$##; s#^github\.com/##')
+			path_has_dotdot_segment "$_p" && die "unsafe path in source URL: $_url"
+			printf '%s/%s' "$SOURCES_DIR" "$_p"
+			;;
+		git@*:*)
+			_p=$(printf '%s' "$_url" | sed 's#^git@##; s#:#/#; s#\.git$##')
+			path_has_dotdot_segment "$_p" && die "unsafe path in source URL: $_url"
+			printf '%s/%s' "$SOURCES_DIR" "$_p"
+			;;
+		/* | "~/"* | "~" | ./* | ../*)
+			expand_one_path "$_url"
+			;;
+		*/*)
+			path_has_dotdot_segment "$_url" && die "unsafe path in source: $_url"
+			printf '%s/%s' "$SOURCES_DIR" "$_url"
+			;;
+		*)
+			expand_one_path "$_url"
+			;;
+	esac
+}
+
+# Fetch or update a git source; local paths are verified present only.
+clone_or_pull_source() {
+	_url=$1
+	_cp=$(source_clone_path "$_url")
+	if is_git_url "$_url"; then
+		if ! assert_under_sources "$_cp"; then
+			die "clone path escapes sources directory: $_cp"
+		fi
+		_git_url=$(normalize_git_url "$_url")
+		if [ -d "$_cp/.git" ]; then
+			spin "pull $_git_url" git -C "$_cp" pull --ff-only ||
+				ui_warn "pull failed for $_cp (continuing with current checkout)"
+		else
+			run mkdir -p "$(dirname "$_cp")"
+			spin "clone $_git_url" git clone "$_git_url" "$_cp" || return 1
+		fi
+	else
+		[ -d "$_cp" ] || die "local source not found: $_cp"
+	fi
+	return 0
+}
+
+# --- store (materialize) --------------------------------------------------------------
+
+# Point $STORE/$_name at $_src (symlink, or directory copy with --copy).
+# Never replaces an unmanaged real directory in the store.
+link_skill() {
+	_name=$1
+	_src=$2
+	_layer=$3
+	if ! is_safe_skill_name "$_name"; then
+		ui_warn "'$_name': unsafe skill name, skipped"
+		return 0
+	fi
+	_dest="$STORE/$_name"
+
+	if is_excluded "$_name"; then
+		return 0
+	fi
+	if is_real_dir "$_dest"; then
+		ui_warn "'$_name': unmanaged directory in store, skipped (move it into a source and 'add' it)"
+		return 0
+	fi
+	if [ -L "$_dest" ]; then
+		if paths_equal "$_dest" "$_src"; then
+			return 0
+		fi
+		run rm -f "$_dest"
+	elif [ -e "$_dest" ]; then
+		ui_warn "'$_name': unexpected file in store, skipped"
+		return 0
+	fi
+	if [ "$USE_COPY" -eq 1 ]; then
+		run cp -R "$_src" "$_dest"
+		ui_ok "$_name ${C_DIM}(copy, $_layer)${C_RESET}"
+	else
+		run ln -s "$(resolve_dir "$_src")" "$_dest"
+		ui_ok "$_name ${C_DIM}($_layer)${C_RESET}"
+	fi
+}
+
+# Rebuild the store from all sources. Layers: org, then user, then local (last wins).
+materialize() {
+	run mkdir -p "$STORE"
+	_plan=$(mktemp)
+
+	for _want_layer in org user; do
+		manifest_entries | while IFS= read -r _line; do
+			_layer=${_line%% *}
+			_src=${_line#* }
+			[ "$_layer" = "$_want_layer" ] || continue
+			_root=$(source_clone_path "$_src")
+			if [ ! -d "$_root" ]; then
+				printf 'MISSING\t%s\t%s\n' "$_layer" "$_src"
+				continue
+			fi
+			find_skills_in_source "$_root" | while IFS="$TAB" read -r _dir _name; do
+				printf 'SKILL\t%s\t%s\t%s\n' "$_layer" "$_name" "$_dir"
+			done
+		done >>"$_plan"
+	done
+
+	if [ -d "$LOCAL_SOURCE" ]; then
+		find_skills_in_source "$LOCAL_SOURCE" | while IFS="$TAB" read -r _dir _name; do
+			printf 'SKILL\t%s\t%s\t%s\n' "local" "$_name" "$_dir"
+		done >>"$_plan"
+	fi
+
+	# Highest layer wins: keep only the last plan entry per skill name.
+	_final=$(mktemp)
+	awk -F '\t' '
+		$1 == "MISSING" { print; next }
+		$1 == "SKILL" { last[$3] = $0; if (!($3 in seen)) { seen[$3] = 1; order[++n] = $3 } }
+		END { for (i = 1; i <= n; i++) print last[order[i]] }
+	' "$_plan" >"$_final"
+
+	while IFS="$TAB" read -r _kind _layer _name _dir; do
+		case $_kind in
+			MISSING) ui_warn "source missing: $_name ($_layer)" ;;
+			SKILL) link_skill "$_name" "$_dir" "$_layer" ;;
+		esac
+	done <"$_final"
+	rm -f "$_plan" "$_final"
+
+	# Prune broken store links whose target is gone (source removed/updated).
+	if [ -d "$STORE" ]; then
+		for _e in "$STORE"/*; do
+			{ [ -e "$_e" ] || [ -L "$_e" ]; } || continue
+			if is_symlink "$_e" && [ ! -e "$_e" ]; then
+				ui_info "pruning broken link: $(basename "$_e")"
+				run rm -f "$_e"
+			fi
+		done
+	fi
+}
+
+# --- views ------------------------------------------------------------------------------
+
+# Emit unique global view paths with a representative agent list.
+# Output: expanded_path<TAB>agent ids (space-separated)
+view_paths() {
+	registry_rows | while IFS="$TAB" read -r _id _dn _gp _pp; do
+		[ "$_gp" = "-" ] && continue
+		printf '%s\t%s\n' "$(expand_agent_path "$_gp")" "$_id"
+	done | awk -F '\t' '
+		{ if ($1 in ids) ids[$1] = ids[$1] " " $2; else { ids[$1] = $2; order[++n] = $1 } }
+		END { for (i = 1; i <= n; i++) printf "%s\t%s\n", order[i], ids[order[i]] }
+	'
+}
+
+# True when the agent path IS the store itself (a real dir at the store
+# location), as opposed to a view symlink that resolves to it.
+# True when $1 is the store directory itself (not a symlink view onto it).
+view_is_native() {
+	! is_symlink "$1" && [ -d "$1" ] && paths_equal "$1" "$STORE"
+}
+
+# linked | absent | missing-parent | real-dir | wrong-link | other
+view_state() {
+	_path=$1
+	if [ ! -e "$_path" ] && [ ! -L "$_path" ]; then
+		printf 'absent'
+	elif is_symlink "$_path" && paths_equal "$_path" "$STORE"; then
+		printf 'linked'
+	elif is_real_dir "$_path"; then
+		printf 'real-dir'
+	elif is_symlink "$_path"; then
+		printf 'wrong-link'
+	else
+		printf 'other'
+	fi
+}
+
+# Turn one agent dir into a view. Migrates real skills to the local source.
+# Replace an agent skills dir with a symlink to the store; migrate contents into sources/local.
+make_view() {
+	_path=$1
+	_ids=$2
+
+	if view_is_native "$_path"; then
+		return 0
+	fi
+	case $(view_state "$_path") in
+		linked)
+			ui_info "$_ids: already linked"
+			return 0
+			;;
+		absent)
+			if [ -d "$(dirname "$_path")" ]; then
+				run ln -s "$STORE" "$_path"
+				ui_ok "$_ids ${C_DIM}-> store${C_RESET}"
+			else
+				ui_info "$_ids: not installed, skipped"
+			fi
+			return 0
+			;;
+		wrong-link)
+			run rm -f "$_path"
+			run ln -s "$STORE" "$_path"
+			ui_ok "$_ids ${C_DIM}(relinked)${C_RESET}"
+			return 0
+			;;
+		real-dir)
+			# Migrate contents into the implicit local source, then link.
+			_moved=0
+			for _entry in "$_path"/*; do
+				[ -e "$_entry" ] || continue
+				_b=$(basename "$_entry")
+				if [ -d "$_entry" ] && is_skill_dir "$_entry"; then
+					_sn=$(get_skill_name "$_entry")
+					if ! is_safe_skill_name "$_sn"; then
+						_bp=$(new_backup_dir)
+						ui_warn "unsafe skill name from '$_entry'; backed up only"
+						run mv "$_entry" "$_bp/$(basename "$_entry")"
+						continue
+					fi
+					if [ -e "$LOCAL_SOURCE/$_sn" ]; then
+						_bp=$(new_backup_dir)
+						ui_warn "'$_sn' already in local source; backing up copy from $_path"
+						run mv "$_entry" "$_bp/$_sn"
+					else
+						run mkdir -p "$LOCAL_SOURCE"
+						run mv "$_entry" "$LOCAL_SOURCE/$_sn"
+						ui_ok "migrated '$_sn' ${C_DIM}-> sources/local${C_RESET}"
+					fi
+					_moved=1
+				else
+					_bp=$(new_backup_dir)
+					ui_warn "non-skill entry '$_b' in $_path; backed up"
+					run mv "$_entry" "$_bp/$_b"
+				fi
+			done
+			_bp=$(new_backup_dir)
+			run mv "$_path" "$_bp/agent-dir-$(basename "$(dirname "$_path")")-$(basename "$_path")"
+			run ln -s "$STORE" "$_path"
+			ui_ok "$_ids ${C_DIM}-> store (migrated)${C_RESET}"
+			[ "$_moved" -eq 1 ] && MIGRATED_ANY=1
+			return 0
+			;;
+		*)
+			ui_warn "$_ids: unexpected state at $_path, skipped"
+			return 0
+			;;
+	esac
+}
+
+# --- commands ------------------------------------------------------------------------------
+
+cmd_init() {
+	ui_header "skillsync init"
+	ui_info "store:  $STORE"
+	ui_info "config: $CONFIG_DIR"
+	run mkdir -p "$STORE" "$SOURCES_DIR"
+
+	MIGRATED_ANY=0
+	_views=$(mktemp)
+	view_paths >"$_views"
+
+	# Candidates: installed agents (parent exists) not yet linked.
+	_cand=$(mktemp)
+	while IFS="$TAB" read -r _path _ids; do
+		view_is_native "$_path" && continue
+		_st=$(view_state "$_path")
+		case $_st in
+			linked) ui_info "$_ids: already linked" ;;
+			absent)
+				[ -d "$(dirname "$_path")" ] && printf '%s\t%s\n' "$_path" "$_ids" >>"$_cand"
+				;;
+			*) printf '%s\t%s\n' "$_path" "$_ids" >>"$_cand" ;;
+		esac
+	done <"$_views"
+
+	if [ -s "$_cand" ]; then
+		if { ! [ -t 0 ] || ! [ -t 2 ]; } && [ "$YES" -ne 1 ]; then
+			rm -f "$_views" "$_cand"
+			die "non-interactive init requires --yes (skillsync --yes init)"
+		fi
+		_sel=$(awk -F '\t' '{ print $2 "  ->  " $1 }' "$_cand" |
+			pick_multi "link these agent skill folders to the store?")
+		while IFS="$TAB" read -r _path _ids; do
+			if printf '%s\n' "$_sel" | grep -qF "$_ids  ->  $_path"; then
+				make_view "$_path" "$_ids"
+			else
+				ui_info "$_ids: skipped by selection"
+			fi
+		done <"$_cand"
+	else
+		ui_info "no unlinked agents detected"
+	fi
+	rm -f "$_views" "$_cand"
+
+	materialize
+	ui_end "init done ${C_DIM}($N_OK ok, $N_WARN warnings)${C_RESET}"
+	if [ "$MIGRATED_ANY" -eq 1 ]; then
+		ui_info "migrated skills now live in $LOCAL_SOURCE (yours to edit or move)"
+	fi
+}
+
+cmd_add() {
+	_source=""
+	_layer="user"
+	while [ $# -gt 0 ]; do
+		case $1 in
+			--layer)
+				shift
+				_layer=${1:-}
+				;;
+			--layer=*) _layer=${1#--layer=} ;;
+			-*) die "unknown option for add: $1" ;;
+			*)
+				[ -z "$_source" ] || die "unexpected argument: $1"
+				_source=$1
+				;;
+		esac
+		shift
+	done
+	[ -n "$_source" ] || die "usage: skillsync add <git-url|owner/repo|path> [--layer org|user]"
+	case $_layer in
+		org | user) ;;
+		*) die "layer must be org or user" ;;
+	esac
+
+	if is_git_url "$_source"; then
+		_entry=$(normalize_git_url "$_source")
+	else
+		_entry=$(expand_one_path "$_source")
+		[ -d "$_entry" ] || die "local source not found: $_entry"
+		_entry=$(resolve_dir "$_entry")
+	fi
+
+	ui_header "skillsync add ${C_DIM}($_layer)${C_RESET} $_entry"
+	clone_or_pull_source "$_source" || die "could not fetch source"
+	manifest_append "$_layer" "$_entry"
+
+	# Re-adding a source un-excludes its skills.
+	_root=$(source_clone_path "$_entry")
+	find_skills_in_source "$_root" | while IFS="$TAB" read -r _dir _name; do
+		if is_excluded "$_name"; then
+			exclude_del "$_name"
+			ui_info "un-excluded '$_name' (re-added)"
+		fi
+	done
+
+	materialize
+	ui_end "add done ${C_DIM}($N_OK ok, $N_WARN warnings)${C_RESET}"
+}
+
+cmd_sync() {
+	ui_header "skillsync sync"
+	_mtmp=$(mktemp)
+	manifest_entries >"$_mtmp" || true
+	while IFS= read -r _line; do
+		_src=${_line#* }
+		if is_git_url "$_src"; then
+			clone_or_pull_source "$_src" || ui_warn "could not update source: $_src (continuing)"
+		fi
+	done <"$_mtmp"
+	rm -f "$_mtmp"
+	materialize
+	ui_end "sync done ${C_DIM}($N_OK ok, $N_WARN warnings)${C_RESET}"
+}
+
+cmd_list() {
+	[ -d "$STORE" ] || return 0
+	for _e in "$STORE"/*; do
+		{ [ -e "$_e" ] || [ -L "$_e" ]; } || continue
+		basename "$_e"
+	done
+}
+
+cmd_remove() {
+	_src_mode=0
+	_all=0
+	_names=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+			--source)
+				_src_mode=1
+				;;
+			--all)
+				_all=1
+				;;
+			-*) die "unknown option for remove: $1" ;;
+			*) _names="$_names
+$1" ;;
+		esac
+		shift
+	done
+	_names=$(printf '%s' "$_names" | sed '/^$/d')
+
+	if [ "$_src_mode" -eq 1 ]; then
+		[ -n "$_names" ] || die "usage: skillsync remove --source <url|path>"
+		printf '%s\n' "$_names" | while IFS= read -r _s; do
+			remove_source "$_s"
+		done
+		materialize
+		ui_end "remove done"
+		return 0
+	fi
+
+	if [ "$_all" -eq 1 ]; then
+		_names=$(cmd_list)
+	elif [ -z "$_names" ]; then
+		_names=$(cmd_list | pick_multi "remove which skills?")
+		[ -n "$_names" ] || die "specify skill names or use --all (non-interactive)"
+	fi
+
+	ui_header "skillsync remove"
+	_ntmp=$(mktemp)
+	printf '%s\n' "$_names" >"$_ntmp"
+	while IFS= read -r _n; do
+		[ -n "$_n" ] || continue
+		if ! is_safe_skill_name "$_n"; then
+			ui_err "'$_n': unsafe skill name, not removing"
+			continue
+		fi
+		_dest="$STORE/$_n"
+		if is_real_dir "$_dest"; then
+			ui_err "'$_n' is unmanaged (real directory at $_dest) — not touching it"
+			continue
+		fi
+		if [ ! -L "$_dest" ] && [ ! -e "$_dest" ]; then
+			ui_warn "'$_n': not installed"
+			continue
+		fi
+		run rm -f "$_dest"
+		exclude_add "$_n"
+		ui_ok "removed $_n ${C_DIM}(gone from all agents; sync won't restore it)${C_RESET}"
+	done <"$_ntmp"
+	rm -f "$_ntmp"
+	ui_end "remove done ${C_DIM}($N_OK removed, $N_WARN warnings)${C_RESET}"
+}
+
+# Drop one manifest source: prune its store links; delete managed clones only (keep local folders).
+remove_source() {
+	_s=$1
+	if is_git_url "$_s"; then
+		_entry=$(normalize_git_url "$_s")
+	else
+		_entry=$(expand_one_path "$_s")
+		_res=$(resolve_dir "$_entry") && _entry=$_res
+	fi
+	if [ -f "$MANIFEST" ] && grep -qF " $_entry" "$MANIFEST"; then
+		if [ "$DRY_RUN" -eq 1 ]; then
+			ui_info "[dry-run] drop manifest entry: $_entry"
+		else
+			grep -vF " $_entry" "$MANIFEST" >"$MANIFEST.tmp" || true
+			mv "$MANIFEST.tmp" "$MANIFEST"
+		fi
+		ui_ok "unregistered $_entry"
+	else
+		ui_warn "not in manifest: $_entry"
+	fi
+	_cp=$(source_clone_path "$_entry")
+
+	# Drop store links that point into this source.
+	_cp_res=$(resolve_dir "$_cp") || _cp_res=$_cp
+	if [ -d "$STORE" ]; then
+		for _e in "$STORE"/*; do
+			{ [ -e "$_e" ] || [ -L "$_e" ]; } || continue
+			is_symlink "$_e" || continue
+			_t=$(resolve_dir "$_e") || continue
+			case $_t in
+				"$_cp_res"/*)
+					run rm -f "$_e"
+					ui_ok "removed $(basename "$_e")"
+					;;
+			esac
+		done
+	fi
+
+	case $_cp in
+		"$SOURCES_DIR"/*)
+			if [ -d "$_cp" ]; then
+				run rm -rf "$_cp"
+				ui_ok "deleted clone $_cp"
+			fi
+			;;
+		*)
+			ui_info "local folder kept: $_cp"
+			;;
+	esac
+}
+
+cmd_status() {
+	printf '%sskillsync %s%s\n' "$C_BOLD" "$VERSION" "$C_RESET"
+	printf 'store:  %s\n' "$STORE"
+	printf 'config: %s\n\n' "$CONFIG_DIR"
+
+	printf '%sSkills%s\n' "$C_BOLD" "$C_RESET"
+	_count=0
+	_local_res=$(resolve_dir "$LOCAL_SOURCE") || _local_res=$LOCAL_SOURCE
+	_sources_res=$(resolve_dir "$SOURCES_DIR") || _sources_res=$SOURCES_DIR
+	if [ -d "$STORE" ]; then
+		for _e in "$STORE"/*; do
+			{ [ -e "$_e" ] || [ -L "$_e" ]; } || continue
+			_n=$(basename "$_e")
+			if is_symlink "$_e"; then
+				_t=$(resolve_dir "$_e") || _t="(broken -> $(readlink "$_e"))"
+				case $_t in
+					"$_local_res"/*) _o="local" ;;
+					"$_sources_res"/*) _o="${_t#"$_sources_res"/}" _o="source ${_o%/*}" ;;
+					*) _o="$_t" ;;
+				esac
+			else
+				_o="${C_YELLOW}unmanaged${C_RESET}"
+			fi
+			printf '  %-26s %s\n' "$_n" "$_o"
+			_count=$((_count + 1))
+		done
+	fi
+	[ "$_count" -eq 0 ] && printf '  (empty — run init / add)\n'
+
+	printf '\n%sAgent views%s\n' "$C_BOLD" "$C_RESET"
+	view_paths | while IFS="$TAB" read -r _path _ids; do
+		if view_is_native "$_path"; then
+			_st="native"
+		else
+			_st=$(view_state "$_path")
+			# Only show absent agents when their parent exists (installed).
+			if [ "$_st" = "absent" ] && [ ! -d "$(dirname "$_path")" ]; then
+				continue
+			fi
+		fi
+		case $_st in
+			linked | native) _c=$C_GREEN ;;
+			absent) _c=$C_DIM ;;
+			*) _c=$C_YELLOW ;;
+		esac
+		printf '  %s%-10s%s %-46s %s\n' "$_c" "$_st" "$C_RESET" "$_path" "${C_DIM}${_ids}${C_RESET}"
+	done
+
+	if [ -f "$MANIFEST" ]; then
+		printf '\n%sSources%s\n' "$C_BOLD" "$C_RESET"
+		manifest_entries | while IFS= read -r _l; do printf '  %s\n' "$_l"; done
+	fi
+	if [ -f "$EXCLUDES" ] && [ -s "$EXCLUDES" ]; then
+		printf '\n%sExcluded%s (removed skills; edit %s to restore)\n' "$C_BOLD" "$C_RESET" "$EXCLUDES"
+		sed 's/^/  /' "$EXCLUDES"
+	fi
+}
+
+cmd_doctor() {
+	ui_header "skillsync doctor"
+	_issues=0
+
+	# Broken symlinks in store.
+	if [ -d "$STORE" ]; then
+		for _e in "$STORE"/*; do
+			{ [ -e "$_e" ] || [ -L "$_e" ]; } || continue
+			if is_symlink "$_e" && [ ! -e "$_e" ]; then
+				ui_err "broken link: $(basename "$_e") -> $(readlink "$_e")  (run sync)"
+				_issues=$((_issues + 1))
+			elif is_real_dir "$_e"; then
+				ui_warn "unmanaged dir in store: $(basename "$_e")  (move into a source, then 'add')"
+			fi
+		done
+	fi
+
+	# Agent views.
+	_vtmp=$(mktemp)
+	view_paths >"$_vtmp"
+	while IFS="$TAB" read -r _path _ids; do
+		view_is_native "$_path" && continue
+		case $(view_state "$_path") in
+			real-dir)
+				ui_err "drifted view: $_path ($_ids) is a real directory  (run init)"
+				_issues=$((_issues + 1))
+				;;
+			wrong-link)
+				ui_err "wrong link: $_path ($_ids) -> $(readlink "$_path")  (run init)"
+				_issues=$((_issues + 1))
+				;;
+			absent)
+				if [ -d "$(dirname "$_path")" ]; then
+					ui_err "not linked: $_path ($_ids)  (run init)"
+					_issues=$((_issues + 1))
+				fi
+				;;
+		esac
+	done <"$_vtmp"
+	rm -f "$_vtmp"
+
+	# Manifest sources present?
+	manifest_entries | while IFS= read -r _line; do
+		_src=${_line#* }
+		_cp=$(source_clone_path "$_src")
+		[ -d "$_cp" ] || ui_warn "source missing on disk: $_src  (run sync or add)"
+	done
+
+	# Cross-layer collisions (informational; higher layer wins by design).
+	_ctmp=$(mktemp)
+	manifest_entries | while IFS= read -r _line; do
+		_layer=${_line%% *}
+		_src=${_line#* }
+		_root=$(source_clone_path "$_src")
+		[ -d "$_root" ] || continue
+		find_skills_in_source "$_root" | while IFS="$TAB" read -r _d _n; do
+			printf '%s\t%s\n' "$_n" "$_layer"
+		done
+	done | sort -u >"$_ctmp"
+	awk -F '\t' '{ c[$1]++ ; l[$1] = l[$1] " " $2 }
+		END { for (n in c) if (c[n] > 1) printf "%s:%s\n", n, l[n] }' "$_ctmp" |
+		while IFS= read -r _col; do
+			ui_info "collision: skill '${_col%%:*}' in layers${_col#*:} (highest wins)"
+		done
+	rm -f "$_ctmp"
+
+	if [ "$_issues" -gt 0 ]; then
+		ui_end "${C_RED}$_issues issue(s) found${C_RESET}"
+		exit 1
+	fi
+	ui_end "${C_GREEN}all clear${C_RESET}"
+}
+
+cmd_uninstall() {
+	_keep=0
+	_purge=0
+	while [ $# -gt 0 ]; do
+		case $1 in
+			--keep) _keep=1 ;;
+			--purge) _purge=1 ;;
+			-*) die "unknown option for uninstall: $1" ;;
+			*) die "unexpected argument: $1" ;;
+		esac
+		shift
+	done
+
+	ui_header "skillsync uninstall"
+	view_paths | while IFS="$TAB" read -r _path _ids; do
+		view_is_native "$_path" && continue
+		[ "$(view_state "$_path")" = "linked" ] || continue
+		if [ "$_keep" -eq 1 ]; then
+			run rm -f "$_path"
+			run mkdir -p "$_path"
+			if [ -d "$STORE" ]; then
+				for _e in "$STORE"/*; do
+					{ [ -e "$_e" ] || [ -L "$_e" ]; } || continue
+					[ -e "$_e" ] || continue # skip broken links
+					run cp -RL "$_e" "$_path/$(basename "$_e")"
+				done
+			fi
+			ui_ok "$_ids ${C_DIM}(view -> real directory with copies)${C_RESET}"
+		else
+			run rm -f "$_path"
+			ui_ok "$_ids ${C_DIM}(view removed)${C_RESET}"
+		fi
+	done
+
+	if [ "$_purge" -eq 1 ]; then
+		if confirm_typed "nuke" "--purge deletes the store, all cloned sources (including sources/local), the manifest, and backups. This cannot be undone."; then
+			run rm -rf "$DATA_DIR"
+			if [ "$CONFIG_DIR" != "$DATA_DIR" ]; then
+				run rm -rf "$CONFIG_DIR"
+			fi
+			ui_ok "purged $DATA_DIR and $CONFIG_DIR"
+		else
+			ui_warn "purge cancelled"
+		fi
+	else
+		ui_info "store, sources, and config kept (use --purge to delete them)"
+	fi
+	ui_end "uninstall done"
+}
+
+cmd_completion() {
+	_shell=${1:-}
+	case $_shell in
+		bash)
+			cat <<'EOF'
+# bash completion for skillsync. Enable with:
+#   eval "$(skillsync completion bash)"
+_skillsync() {
+	local cur prev
+	cur="${COMP_WORDS[COMP_CWORD]}"
+	prev="${COMP_WORDS[COMP_CWORD - 1]}"
+	local cmds="init add sync remove list status doctor uninstall completion help"
+	local flags="--dry-run --yes --copy --help"
+	if [ "$COMP_CWORD" -eq 1 ]; then
+		COMPREPLY=($(compgen -W "$cmds $flags" -- "$cur"))
+		return
+	fi
+	case "${COMP_WORDS[1]}" in
+		remove | rm)
+			COMPREPLY=($(compgen -W "$(skillsync list 2>/dev/null) --source --all" -- "$cur"))
+			;;
+		add)
+			COMPREPLY=($(compgen -W "--layer" -- "$cur"))
+			;;
+		uninstall | nuke)
+			COMPREPLY=($(compgen -W "--keep --purge" -- "$cur"))
+			;;
+		completion)
+			COMPREPLY=($(compgen -W "bash zsh" -- "$cur"))
+			;;
+	esac
+}
+complete -F _skillsync skillsync
+EOF
+			;;
+		zsh)
+			cat <<'EOF'
+# zsh completion for skillsync. Enable with:
+#   eval "$(skillsync completion zsh)"
+_skillsync() {
+	local -a cmds
+	cmds=(init add sync remove list status doctor uninstall completion help)
+	if (( CURRENT == 2 )); then
+		_describe 'command' cmds
+		return
+	fi
+	case $words[2] in
+		remove | rm)
+			local -a skills
+			skills=(${(f)"$(skillsync list 2>/dev/null)"})
+			_describe 'skill' skills
+			;;
+		add) _arguments '--layer[layer]:(org user)' ;;
+		uninstall | nuke) _arguments '--keep' '--purge' ;;
+		completion) _values 'shell' bash zsh ;;
+	esac
+}
+compdef _skillsync skillsync
+EOF
+			;;
+		*)
+			die "usage: skillsync completion bash|zsh"
+			;;
+	esac
+}
+
+cmd_help() {
+	cat <<EOF
+${C_BOLD}skillsync${C_RESET} $VERSION — unified AI agent skill installation
+
+${C_BOLD}Usage:${C_RESET}
+  skillsync [options] <command> [args]
+
+${C_BOLD}Commands:${C_RESET}
+  init                        Create store, migrate per-agent skills, link views
+                              (non-interactive: skillsync --yes init)
+  add <url|path> [--layer org|user]
+                              Register a skill source (git repo or folder)
+  sync                        Pull all sources, refresh the store
+  remove [names...] (rm)      Remove skills everywhere (picker when tty, no args)
+  remove --all                Remove every installed skill
+  remove --source <url|path>  Unregister a source and its skills
+  list (ls)                   Installed skill names, one per line
+  status                      Skills, views, sources overview
+  doctor                      Diagnose problems (exit 1 if issues)
+  uninstall [--keep] [--purge] (nuke)
+                              Reverse init; --keep converts views to real
+                              copies; --purge deletes all skillsync data
+  completion bash|zsh         Shell completion script
+  help                        This help
+
+${C_BOLD}Options:${C_RESET}  (global; before or after the command)
+  --dry-run    Print actions without changing anything
+  --yes, -y    Skip prompts; init/remove select all in non-interactive use
+  --copy       Copy instead of symlink (no-symlink filesystems)
+
+${C_BOLD}Environment:${C_RESET}
+  SKILLSYNC_HOME       Force all state under one root (default: XDG dirs)
+  SKILLSYNC_REGISTRY   Registry TSV (default: <install>/registry/agents.tsv)
+  XDG_CONFIG_HOME      Config: \$XDG_CONFIG_HOME/skillsync (~/.config/skillsync)
+  XDG_DATA_HOME        Data:   \$XDG_DATA_HOME/skillsync (~/.local/share/skillsync)
+  NO_COLOR             Disable colors and symbols
+EOF
+}
+
+# --- main --------------------------------------------------------------------------------------
+
+# Pull global flags from anywhere in argv (before or after the command).
+# Sentinel trick: append --, keep non-globals after it, then drop the sentinel.
+set -- "$@" --
+while [ "$1" != "--" ]; do
+	case $1 in
+		--dry-run) DRY_RUN=1 ;;
+		--yes | -y) YES=1 ;;
+		--copy) USE_COPY=1 ;;
+		-h | --help)
+			cmd_help
+			exit 0
+			;;
+		-V | --version)
+			printf '%s\n' "$VERSION"
+			exit 0
+			;;
+		*) set -- "$@" "$1" ;;
+	esac
+	shift
+done
+shift
+
+_cmd=${1:-help}
+[ $# -gt 0 ] && shift
+case $_cmd in
+	-*) die "unknown option: $_cmd (try --help)" ;;
+esac
+
+case $_cmd in
+	init) cmd_init "$@" ;;
+	add) cmd_add "$@" ;;
+	sync) cmd_sync "$@" ;;
+	remove | rm) cmd_remove "$@" ;;
+	list | ls) cmd_list "$@" ;;
+	status) cmd_status "$@" ;;
+	doctor) cmd_doctor "$@" ;;
+	uninstall | nuke) cmd_uninstall "$@" ;;
+	completion) cmd_completion "$@" ;;
+	help) cmd_help ;;
+	*) die "unknown command: $_cmd (try help)" ;;
+esac

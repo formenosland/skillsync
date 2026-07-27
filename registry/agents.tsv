@@ -1,0 +1,92 @@
+# Agent skills path registry for skillsync — GENERATED FILE, do not edit by hand.
+# Regenerate with: registry/generate.sh [commit-sha]
+# Upstream: https://github.com/vercel-labs/skills src/agents.ts @ 9230fe8d4879e4d9ba04e7a31147477ffbcc51ca
+# Generated: 2026-07-25
+#
+# Format: agent_id<TAB>display_name<TAB>global_path<TAB>project_path
+#   - Paths may use ~ (home), ${VAR:-default} (env-overridable home dirs,
+#     e.g. ${CODEX_HOME:-~/.codex}/skills), and | -separated alternates
+#     (first alternate whose parent directory exists wins, else the first).
+#   - global_path "-" means project-only agent: no global view is created.
+#
+# Local overrides: put rows in $XDG_CONFIG_HOME/skillsync/agents.local.tsv
+# (same format); rows there win over this file by agent_id.
+#
+# Known out of scope: Perplexity Computer (skills live in a cloud library
+# uploaded via its UI — no local filesystem folder to link).
+agent_id	display_name	global_path	project_path
+adal	AdaL	~/.adal/skills	.adal/skills
+aider-desk	AiderDesk	~/.aider-desk/skills	.aider-desk/skills
+amp	Amp	${XDG_CONFIG_HOME:-~/.config}/agents/skills	.agents/skills
+antigravity	Antigravity	~/.gemini/antigravity/skills	.agents/skills
+antigravity-cli	Antigravity CLI	~/.gemini/antigravity-cli/skills	.agents/skills
+astrbot	AstrBot	~/.astrbot/data/skills	data/skills
+augment	Augment	~/.augment/skills	.augment/skills
+autohand-code	Autohand Code CLI	${AUTOHAND_HOME:-~/.autohand}/skills	.autohand/skills
+bob	IBM Bob	~/.bob/skills	.bob/skills
+claude-code	Claude Code	${CLAUDE_CONFIG_DIR:-~/.claude}/skills	.claude/skills
+cline	Cline	~/.agents/skills	.agents/skills
+codearts-agent	CodeArts Agent	~/.codeartsdoer/skills	.codeartsdoer/skills
+codebuddy	CodeBuddy	~/.codebuddy/skills	.codebuddy/skills
+codemaker	Codemaker	~/.codemaker/skills	.codemaker/skills
+codestudio	Code Studio	~/.codestudio/skills	.codestudio/skills
+codex	Codex	${CODEX_HOME:-~/.codex}/skills	.agents/skills
+command-code	Command Code	~/.commandcode/skills	.commandcode/skills
+continue	Continue	~/.continue/skills	.continue/skills
+cortex	Cortex Code	~/.snowflake/cortex/skills	.cortex/skills
+crush	Crush	~/.config/crush/skills	.crush/skills
+cursor	Cursor	~/.cursor/skills	.agents/skills
+deepagents	Deep Agents	~/.deepagents/agent/skills	.agents/skills
+devin	Devin for Terminal	${XDG_CONFIG_HOME:-~/.config}/devin/skills	.devin/skills
+dexto	Dexto	~/.agents/skills	.agents/skills
+droid	Droid	~/.factory/skills	.factory/skills
+eve	Eve	-	agent/skills
+firebender	Firebender	~/.firebender/skills	.agents/skills
+forgecode	ForgeCode	~/.forge/skills	.forge/skills
+gemini-cli	Gemini CLI	~/.gemini/skills	.agents/skills
+github-copilot	GitHub Copilot	~/.copilot/skills	.agents/skills
+goose	Goose	${XDG_CONFIG_HOME:-~/.config}/goose/skills	.goose/skills
+grok	Grok Build	${GROK_HOME:-~/.grok}/skills	.grok/skills
+hermes-agent	Hermes Agent	${HERMES_HOME:-~/.hermes}/skills	.hermes/skills
+iflow-cli	iFlow CLI	~/.iflow/skills	.iflow/skills
+inference-sh	inference.sh	~/.inferencesh/skills	.inferencesh/skills
+jazz	Jazz	~/.jazz/skills	.jazz/skills
+junie	Junie	~/.junie/skills	.junie/skills
+kilo	Kilo Code	~/.kilocode/skills	.kilocode/skills
+kimchi	Kimchi	~/.config/kimchi/harness/skills	.kimchi/skills
+kimi-code-cli	Kimi Code CLI	~/.agents/skills	.agents/skills
+kiro-cli	Kiro CLI	~/.kiro/skills	.kiro/skills
+kode	Kode	~/.kode/skills	.kode/skills
+lingma	Lingma	~/.lingma/skills	.lingma/skills
+loaf	Loaf	~/.agents/skills	.agents/skills
+mcpjam	MCPJam	~/.mcpjam/skills	.mcpjam/skills
+mistral-vibe	Mistral Vibe	${VIBE_HOME:-~/.vibe}/skills	.vibe/skills
+moxby	Moxby	~/.moxby/skills	.moxby/skills
+mux	Mux	~/.mux/skills	.mux/skills
+neovate	Neovate	~/.neovate/skills	.neovate/skills
+ona	Ona	~/.ona/skills	.ona/skills
+openclaw	OpenClaw	~/.openclaw/skills|~/.clawdbot/skills|~/.moltbot/skills	skills
+opencode	OpenCode	${XDG_CONFIG_HOME:-~/.config}/opencode/skills	.agents/skills
+openhands	OpenHands	~/.openhands/skills	.openhands/skills
+pi	Pi	~/.pi/agent/skills	.pi/skills
+pochi	Pochi	~/.pochi/skills	.pochi/skills
+promptscript	PromptScript	-	.agents/skills
+qoder	Qoder	~/.qoder/skills	.qoder/skills
+qoder-cn	Qoder CN	~/.qoder-cn/skills	.qoder/skills
+qwen-code	Qwen Code	~/.qwen/skills	.qwen/skills
+reasonix	Reasonix	~/.reasonix/skills	.reasonix/skills
+replit	Replit	${XDG_CONFIG_HOME:-~/.config}/agents/skills	.agents/skills
+roo	Roo Code	~/.roo/skills	.roo/skills
+rovodev	Rovo Dev	~/.rovodev/skills	.rovodev/skills
+tabnine-cli	Tabnine CLI	~/.tabnine/agent/skills	.tabnine/agent/skills
+terramind	Terramind	~/.terramind/skills	.terramind/skills
+tinycloud	Tinycloud	~/.tinycloud/skills	.tinycloud/skills
+trae	Trae	~/.trae/skills	.trae/skills
+trae-cn	Trae CN	~/.trae-cn/skills	.trae/skills
+universal	Universal	${XDG_CONFIG_HOME:-~/.config}/agents/skills	.agents/skills
+warp	Warp	~/.agents/skills	.agents/skills
+windsurf	Windsurf	~/.codeium/windsurf/skills	.windsurf/skills
+zcode	ZCode	~/.zcode/skills	.zcode/skills
+zed	Zed	~/.agents/skills	.agents/skills
+zencoder	Zencoder	~/.zencoder/skills	.zencoder/skills
+zenflow	Zenflow	~/.zencoder/skills	.zencoder/skills
