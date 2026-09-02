@@ -167,6 +167,8 @@ Install/update is a pipe-safe `install.sh`. Today:
 curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
 ```
 
+Default git install is the latest GitHub Release tag. `SKILLSYNC_INSTALL_REF` overrides (tag, branch, or commit). A checkout of this repo copies the local tree and does not hit the network.
+
 For formenos.land tools the planned stable URL is `https://get.formenos.land/<tool>/install.sh` (e.g. `/skillsync/install.sh`), backed by a small GitHub Pages repo with one static script per tool, synced from each tool repo on release (a Cloudflare redirect to the repository raw URL is an acceptable alternative). Re-running the installer updates the app copy; it does not run `skillsync init` or touch views. Removing the tool (`install.sh --uninstall`) deletes only the app and bin symlink; `skillsync uninstall [--purge]` manages views and skill data.
 
 ## 7. Pinning and Updates

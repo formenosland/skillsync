@@ -26,7 +26,7 @@ Bump ShellCheck pin in both `Makefile` and `.github/workflows/ci.yml` (`SHELLCHE
 2. **POSIX sh only** — `bin/skillsync`, `install.sh`, `registry/generate.sh`, `tests/run.sh`. No bashisms. `make shellcheck` must stay clean.
 3. **`registry/agents.tsv` is generated** — never hand-edit. Regenerate with `registry/generate.sh <upstream-sha>`; extend `prefix()` if upstream adds a path token.
 4. Keep behavior **`--dry-run`-able** and **`--yes`-able** (automation first).
-5. **Docs travel with behavior:** same change updates `README.md`, `docs/DESIGN.md`, and `skill/SKILL.md` when semantics change; update `CHANGELOG.md` for user-visible changes.
+5. **Docs travel with behavior:** same change updates `README.md`, `docs/DESIGN.md`, and `skill/SKILL.md` when semantics change. Do not hand-edit `VERSION` in `bin/skillsync` or invent git tags — [cocogitto](https://docs.cocogitto.io/) (`cog.toml`) owns version bumps and `CHANGELOG.md` on release.
 
 ## Boundaries
 

@@ -79,6 +79,12 @@ _sc_have=$(shellcheck --version | awk '/^version:/{print $2; exit}')
 [ "$_sc_have" = "$_sc_want" ] || fail "shellcheck ${_sc_have}, want ${_sc_want}"
 check "shellcheck clean" shellcheck "$SKILLSYNC" "$ROOT/install.sh" "$ROOT/registry/generate.sh" "$0"
 check "registry has data rows" sh -c "grep -cv '^#\\|^agent_id' '$ROOT/registry/agents.tsv' | grep -q '[0-9]'"
+_ver=$(sed -n 's/^VERSION="\([^"]*\)"$/\1/p' "$SKILLSYNC" | head -n 1)
+[ -n "$_ver" ] || fail "VERSION= not found in bin/skillsync"
+_got=$("$SKILLSYNC" --version)
+check "skillsync --version matches VERSION" test "$_got" = "$_ver"
+_gotv=$("$SKILLSYNC" -V)
+check "skillsync -V matches VERSION" test "$_gotv" = "$_ver"
 
 # --- 1. init: migration, views, install detection ------------------------------
 
@@ -315,6 +321,8 @@ drop_sandbox
 # --- 11. installer ---------------------------------------------------------------------
 
 say "== installer"
+_got=$(printf '%s' '{"url":"x","tag_name":"v3.1.4","name":"n"}' | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
+check "release json tag_name parse" test "$_got" = "v3.1.4"
 T=$(mktemp -d)
 export HOME="$T/home" XDG_DATA_HOME="$T/data" XDG_CONFIG_HOME="$T/config"
 mkdir -p "$HOME"

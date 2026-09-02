@@ -53,14 +53,28 @@ Known gaps in upstream coverage belong in your local `agents.local.tsv` first, a
 
 - One logical change per PR.
 - Explain the *why* in the description; the diff shows the what.
+- Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, …). CI runs `cog check --from-latest-tag`.
 - CI (shellcheck + test suite on Linux and macOS) must be green.
 - Docs live next to behavior: if you change semantics, update `README.md`, `docs/DESIGN.md`, and `skill/SKILL.md` in the same PR.
 
 ## Releases
 
-- Semantic versioning; bump `VERSION` in `bin/skillsync`.
-- Update `CHANGELOG.md` (Keep a Changelog format).
-- Tag `vX.Y.Z`; installers pin via `SKILLSYNC_INSTALL_REF`.
+Versioning is [Semantic Versioning](https://semver.org/) via [cocogitto](https://docs.cocogitto.io/). Do not hand-edit `VERSION` in `bin/skillsync` or append changelog sections for a release — `cog bump` does both and tags `vX.Y.Z`.
+
+**One-time seed** (until `v0.2.0` exists on the remote):
+
+```sh
+git tag -a v0.2.0 d55d7ac1a0f17d42de8097b1cf4906ea3f5cefa0 -m "skillsync 0.2.0"
+git push origin v0.2.0
+```
+
+That tag marks the first public preview. Later `fix:` / `feat:` commits become `0.2.1` (or higher) on the next bump.
+
+Ship a release from `main` after merging conventional commits:
+
+1. GitHub → Actions → **Release** → **Run workflow**, or locally: `cog bump --auto` then `git push origin HEAD` and `git push origin vX.Y.Z`.
+2. The Release workflow publishes a GitHub Release from `cog changelog --at <tag>`.
+3. `install.sh` (curl) installs that latest GitHub release. `SKILLSYNC_INSTALL_REF` is only an override (specific tag, or `main` for HEAD).
 
 ## Security
 

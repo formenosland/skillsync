@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Check out branch for bump
+        if: github.event_name == 'workflow_dispatch'
+        run: git checkout "${GITHUB_REF_NAME}"
+
+      - name: Bump version
+        if: github.event_name == 'workflow_dispatch'
+        id: bump
+        uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20 # v4.1.0
+        with:
+          command: bump
+          args: --auto
+          # github-actions[bot] user id 41898282; GitHub noreply form so
+          # the bump commit is attributed to the Actions bot.
+          # https://api.github.com/users/github-actions%5Bbot%5D
+          git-user: github-actions[bot]
+          git-user-email: 41898282+github-actions[bot]@users.noreply.github.com
+
+      - name: Push bump commit and tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -eu
+          v="${{ steps.bump.outputs.version }}"
+          v="${v#v}"
+          git push origin HEAD
+          git push origin "v${v}"
+          echo "tag=v${v}" >> "$GITHUB_OUTPUT"
+        id: pushed
+
+      - name: Resolve tag
+        id: meta
+        run: |
+          set -eu
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "tag=${{ steps.pushed.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Changelog for GitHub Release
+        id: notes
+        uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20 # v4.1.0
+        with:
+          command: changelog
+          args: --at ${{ steps.meta.outputs.tag }} -t full_hash
+
+      - name: Write release notes
+        env:
+          NOTES: ${{ steps.notes.outputs.stdout }}
+        run: printf '%s\n' "$NOTES" > GITHUB_CHANGELOG.md
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          body_path: GITHUB_CHANGELOG.md
+          generate_release_notes: false

@@ -1,12 +1,13 @@
 # skillsync
 
-> One skill store. Every agent. **Install a skill once — it shows up in Claude Code, Cursor, Codex, Gemini CLI, and ~75 other agents.**
+> One skill store. Every agent. Install a skill once — it shows up in Claude Code, Cursor, Codex, Gemini CLI, and the rest of your toolchain.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![POSIX sh](https://img.shields.io/badge/shell-POSIX%20sh-lightgrey.svg)](bin/skillsync)
 [![CI](https://github.com/formenosland/skillsync/actions/workflows/ci.yml/badge.svg)](https://github.com/formenosland/skillsync/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/formenosland/skillsync)](https://github.com/formenosland/skillsync/releases)
 
-Every major AI coding agent supports [Agent Skills](https://agentskills.io) — but each one wants them in its own folder (`~/.claude/skills`, `~/.codex/skills`, `~/.cursor/skills`, …). Multiply that by org, personal, and project scopes, and skills management becomes an N × M mess.
+AI coding agents support [Agent Skills](https://agentskills.io) — but each one wants them in its own folder (`~/.claude/skills`, `~/.codex/skills`, `~/.cursor/skills`, …). Multiply that by org, personal, and project scopes, and skills management becomes an N × M mess.
 
 **skillsync** ends it with a *one store, many views* model (think GNU Stow, for agent skills):
 
@@ -29,7 +30,7 @@ Agent views
   linked     ~/.agents/skills        cline dexto warp zed …
 ```
 
-The invariant: **skillsync owns the store; humans own sources.** The store only ever contains symlinks created by skillsync. Your skill files live in git repos or folders you control — skillsync never deletes them.
+The store only ever contains symlinks created by skillsync. Your skill files stay in git repos or folders you control — skillsync never deletes them. `skillsync --version` prints the installed version.
 
 Zero runtime dependencies beyond POSIX `sh`, `git`, `ln`, and standard coreutils.
 
@@ -39,19 +40,18 @@ Zero runtime dependencies beyond POSIX `sh`, `git`, `ln`, and standard coreutils
 curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
 ```
 
+Installs the latest GitHub release (re-run to update). From a checkout, `./install.sh` copies that tree with no network.
+
 <details>
-<summary>Other install methods</summary>
+<summary>Override the git ref</summary>
 
-
-From a checkout (no network):
+`SKILLSYNC_INSTALL_REF` is optional — a tag, branch, or commit when you do not want the latest release (`main` for unreleased HEAD).
 
 ```sh
-./install.sh
+SKILLSYNC_INSTALL_REF=main curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
 ```
 
-Pin a git ref: `SKILLSYNC_INSTALL_REF=v0.2.0 curl -fsSL … | sh`
-
-The installer copies the app to `~/.local/share/skillsync/app/` and symlinks `~/.local/bin/skillsync` (printing a one-line PATH fix if `~/.local/bin` isn't on your PATH). Re-run to update.
+The installer copies the app to `~/.local/share/skillsync/app/` and symlinks `~/.local/bin/skillsync` (printing a one-line PATH fix if `~/.local/bin` isn't on your PATH).
 
 </details>
 
@@ -94,9 +94,7 @@ skillsync remove foo --dry-run
 
 Non-interactive: `skillsync init --yes` when agents need linking; `skillsync remove foo` or `skillsync remove --all --yes` (bare `remove` with no TTY needs names or `--all`).
 
-### Remove is remove
-
-`remove` makes the skill disappear from the store — and therefore every agent — immediately, with no backups needed: source files are never touched. The name is recorded in `exclude.conf` so `sync` won't resurrect it; re-`add` the source (or edit the file) to bring it back.
+`remove` drops the skill from the store — and therefore every agent — immediately. Source files are never touched. The name is recorded in `exclude.conf` so `sync` won't resurrect it; re-`add` the source (or edit the file) to bring it back.
 
 ### Two kinds of uninstall
 

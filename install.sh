@@ -1,14 +1,15 @@
 #!/bin/sh
 # skillsync installer — pipe-safe (main at end).
 #
-# Install:  curl -fsSL https://get.formenos.land/skillsync/install.sh | sh
+# Install:  curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
 # Update:    re-run the same command
 # Remove:    curl -fsSL ... | sh -s -- --uninstall
+# Pin/override: SKILLSYNC_INSTALL_REF=main|vX.Y.Z|commit  (default: latest GitHub release)
 #
 # From a checkout: ./install.sh
 #
 # Environment:
-#   SKILLSYNC_INSTALL_REF     git branch/tag/commit (default: main)
+#   SKILLSYNC_INSTALL_REF     git branch/tag/commit (unset = latest GitHub release)
 #   SKILLSYNC_INSTALL_SOURCE  local directory to copy (skips git clone)
 #   SKILLSYNC_INSTALL_REPO    override git URL
 #
@@ -17,8 +18,8 @@
 set -eu
 
 REPO_DEFAULT="https://github.com/formenosland/skillsync.git"
-REF="${SKILLSYNC_INSTALL_REF:-main}"
 REPO="${SKILLSYNC_INSTALL_REPO:-$REPO_DEFAULT}"
+REF=""
 
 DATA_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/skillsync"
 APP_DIR="$DATA_ROOT/app"
@@ -91,6 +92,50 @@ local_source_dir() {
 	return 1
 }
 
+# GitHub JSON: keep in sync with tests/run.sh "release json tag_name parse".
+release_tag_from_json() {
+	sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+github_repo_slug() {
+	_u=$REPO
+	_u=${_u%.git}
+	case $_u in
+		https://github.com/*) printf '%s' "${_u#https://github.com/}" ;;
+		http://github.com/*) printf '%s' "${_u#http://github.com/}" ;;
+		git@github.com:*) printf '%s' "${_u#git@github.com:}" ;;
+		ssh://git@github.com/*) printf '%s' "${_u#ssh://git@github.com/}" ;;
+		*) return 1 ;;
+	esac
+}
+
+# Latest published GitHub Release (not highest semver among all tags).
+resolve_install_ref() {
+	if [ -n "${SKILLSYNC_INSTALL_REF:-}" ]; then
+		REF=$SKILLSYNC_INSTALL_REF
+		return 0
+	fi
+	_slug=$(github_repo_slug) || _slug=""
+	if [ -z "$_slug" ]; then
+		warn "cannot infer GitHub repo from $REPO; installing from main"
+		REF=main
+		return 0
+	fi
+	command -v curl >/dev/null 2>&1 || {
+		warn "curl not found; installing from main"
+		REF=main
+		return 0
+	}
+	_json=$(curl -fsSL "https://api.github.com/repos/${_slug}/releases/latest") || _json=""
+	REF=$(printf '%s' "$_json" | release_tag_from_json)
+	if [ -z "$REF" ]; then
+		warn "no GitHub release yet; installing from main"
+		REF=main
+		return 0
+	fi
+	info "latest release: $REF"
+}
+
 copy_tree() {
 	_src=$1
 	_dst=$2
@@ -117,6 +162,7 @@ install_from_local() {
 }
 
 install_from_git() {
+	resolve_install_ref
 	mkdir -p "$(dirname "$APP_DIR")"
 	if [ -d "$APP_DIR/.git" ]; then
 		info "updating existing install in $APP_DIR"
@@ -204,7 +250,7 @@ usage() {
 	cat <<EOF
 skillsync installer
 
-  curl -fsSL https://get.formenos.land/skillsync/install.sh | sh
+  curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
   ./install.sh
 
 Options:

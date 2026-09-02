@@ -34,7 +34,6 @@ skill files — only links.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
-# once live: https://get.formenos.land/skillsync/install.sh
 skillsync init
 ```
 
