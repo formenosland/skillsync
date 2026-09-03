@@ -73,8 +73,8 @@ That tag marks the first public preview. Later `fix:` / `feat:` commits become `
 Ship a release from `main` after merging conventional commits:
 
 1. GitHub → Actions → **Release** → **Run workflow**, or locally: `cog bump --auto` then `git push origin HEAD` and `git push origin vX.Y.Z`.
-2. The Release workflow publishes a GitHub Release from `cog changelog --at <tag>`.
-3. `install.sh` (curl) installs that latest GitHub release. `SKILLSYNC_INSTALL_REF` is only an override (specific tag, or `main` for HEAD).
+2. The Release workflow publishes a GitHub Release from `cog changelog --at <tag>` and appends the GitHub source-archive URL plus `sha256` (for the Homebrew formula; the archive is not attached as a Release asset).
+3. `install.sh` (curl) and `brew install formenosland/tap/skillsync` both track that latest tag. After the Release exists, bump `url` and `sha256` in [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap) `Formula/skillsync.rb` from the notes. `SKILLSYNC_INSTALL_REF` is only an override for curl (specific tag, or `main` for HEAD).
 
 ## Security
 

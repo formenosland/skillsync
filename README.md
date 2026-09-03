@@ -37,10 +37,14 @@ Zero runtime dependencies beyond POSIX `sh`, `git`, `ln`, and standard coreutils
 ## Install
 
 ```sh
+brew install formenosland/tap/skillsync
+```
+
+```sh
 curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
 ```
 
-Installs the latest GitHub release (re-run to update). From a checkout, `./install.sh` copies that tree with no network.
+Homebrew tracks tagged releases via [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap). The curl installer also installs the latest GitHub release (re-run to update). From a checkout, `./install.sh` copies that tree with no network. Do not mix the two on `PATH` unless you know which binary wins.
 
 <details>
 <summary>Override the git ref</summary>
@@ -101,7 +105,8 @@ Non-interactive: `skillsync init --yes` when agents need linking; `skillsync rem
 | Command | Removes |
 |---------|---------|
 | `skillsync uninstall` | Agent view symlinks only (clean reverse of `init`); add `--keep` to leave real copies in each agent folder, `--purge` to also delete store, sources, and config (type `nuke` to confirm; `skillsync --yes uninstall --purge` skips prompts) |
-| `install.sh --uninstall` | The skillsync tool itself (`~/.local/bin/skillsync` + app copy) — never your skill data |
+| `install.sh --uninstall` | The curl-installed tool (`~/.local/bin/skillsync` + app copy) — never your skill data |
+| `brew uninstall skillsync` | The Homebrew keg only — never your skill data |
 
 ### Shell completion
 

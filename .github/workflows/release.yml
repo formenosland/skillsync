@@ -63,10 +63,42 @@ jobs:
           command: changelog
           args: --at ${{ steps.meta.outputs.tag }} -t full_hash
 
+      - name: Source archive sha256
+        id: archive
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -eu
+          url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${TAG}.tar.gz"
+          i=0
+          while [ "$i" -lt 15 ]; do
+            if curl -fsSL "$url" -o /tmp/skillsync-src.tar.gz; then
+              break
+            fi
+            i=$((i + 1))
+            sleep 2
+          done
+          [ -f /tmp/skillsync-src.tar.gz ] || {
+            echo "could not download $url" >&2
+            exit 1
+          }
+          sha=$(sha256sum /tmp/skillsync-src.tar.gz | awk '{print $1}')
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
       - name: Write release notes
         env:
           NOTES: ${{ steps.notes.outputs.stdout }}
-        run: printf '%s\n' "$NOTES" > GITHUB_CHANGELOG.md
+          SHA: ${{ steps.archive.outputs.sha256 }}
+          URL: ${{ steps.archive.outputs.url }}
+        run: |
+          {
+            printf '%s\n' "$NOTES"
+            printf '\n## Homebrew\n\n'
+            printf 'Tagged source archive for the formula `url` / `sha256` '
+            printf '(GitHub generates this; it is not a Release asset):\n\n'
+            printf '```\n%s\nsha256 %s\n```\n' "$URL" "$SHA"
+          } > GITHUB_CHANGELOG.md
 
       - name: GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3

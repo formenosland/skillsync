@@ -157,11 +157,12 @@ The reference CLI is installed out-of-band from skill data:
 
 | Piece | Location |
 |-------|----------|
-| Application (script, registry, docs) | `${XDG_DATA_HOME:-~/.local/share}/skillsync/app/` |
-| User command | `~/.local/bin/skillsync` → `app/bin/skillsync` |
+| Application (curl install) | `${XDG_DATA_HOME:-~/.local/share}/skillsync/app/` |
+| User command (curl) | `~/.local/bin/skillsync` → `app/bin/skillsync` |
+| Application (Homebrew) | keg under the Homebrew prefix (`libexec` + `bin/skillsync` symlink) |
 | Skill config / data | `${XDG_CONFIG_HOME:-~/.config}/skillsync/` and `${XDG_DATA_HOME:-~/.local/share}/skillsync/` (store, sources, backups) |
 
-Install/update is a pipe-safe `install.sh`. Today:
+Install/update is either Homebrew or a pipe-safe `install.sh`. Homebrew is the formula in [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap) (`brew install formenosland/tap/skillsync`); it uses GitHub’s tagged source archive, not a custom binary. Curl:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
@@ -169,7 +170,7 @@ curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install
 
 Default git install is the latest GitHub Release tag. `SKILLSYNC_INSTALL_REF` overrides (tag, branch, or commit). A checkout of this repo copies the local tree and does not hit the network.
 
-For formenos.land tools the planned stable URL is `https://get.formenos.land/<tool>/install.sh` (e.g. `/skillsync/install.sh`), backed by a small GitHub Pages repo with one static script per tool, synced from each tool repo on release (a Cloudflare redirect to the repository raw URL is an acceptable alternative). Re-running the installer updates the app copy; it does not run `skillsync init` or touch views. Removing the tool (`install.sh --uninstall`) deletes only the app and bin symlink; `skillsync uninstall [--purge]` manages views and skill data.
+For formenos.land tools the planned stable URL is `https://get.formenos.land/<tool>/install.sh` (e.g. `/skillsync/install.sh`), backed by a small GitHub Pages repo with one static script per tool, synced from each tool repo on release (a Cloudflare redirect to the repository raw URL is an acceptable alternative). Re-running the installer updates the app copy; it does not run `skillsync init` or touch views. Removing the tool (`install.sh --uninstall` or `brew uninstall skillsync`) deletes only that install method’s files; `skillsync uninstall [--purge]` manages views and skill data.
 
 ## 7. Pinning and Updates
 

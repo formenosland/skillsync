@@ -33,7 +33,8 @@ skill files — only links.
 ## Bootstrap
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
+brew install formenosland/tap/skillsync
+# or: curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
 skillsync init
 ```
 
@@ -95,9 +96,10 @@ Exit code 1 only for **actionable** errors (broken links, drifted/wrong/not-link
 ## Cautions
 
 - **Two uninstalls:** `install.sh --uninstall` (or `curl ... | sh -s -- --uninstall`)
-  removes only the `skillsync` binary and app under
-  `~/.local/share/skillsync/app/`. `skillsync uninstall` removes agent
-  view symlinks; `--purge` also deletes store, sources, and config.
+  removes only the curl-installed binary and app under
+  `~/.local/share/skillsync/app/`. `brew uninstall skillsync` removes the
+  Homebrew keg. Neither touches skill data. `skillsync uninstall` removes
+  agent view symlinks; `--purge` also deletes store, sources, and config.
 - `uninstall --purge` deletes the store, cloned sources (including
   migrated `sources/local/`), config, and backups. Confirm by typing
   `nuke`; `skillsync --yes uninstall --purge` skips that prompt. Everything

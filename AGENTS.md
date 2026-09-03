@@ -33,7 +33,7 @@ Bump ShellCheck pin in both `Makefile` and `.github/workflows/ci.yml` (`SHELLCHE
 - Do not weaken the ownership invariant to “helpfully” delete `sources/local/` or other user trees.
 - Do not rename this project to `skills` (collides with vercel’s npm package / common paths).
 - Store skill names must match Agent Skills `name` rules: `^[a-z0-9]+(-[a-z0-9]+)*$`, max 64 chars.
-- Two uninstalls by design: `install.sh --uninstall` (tool only) vs `skillsync uninstall` (views/data; `--purge` needs typed `nuke` unless `--yes`).
+- Two uninstalls by design: `install.sh --uninstall` or `brew uninstall skillsync` (tool only) vs `skillsync uninstall` (views/data; `--purge` needs typed `nuke` unless `--yes`).
 
 ## Pitfalls (do not reintroduce)
 
