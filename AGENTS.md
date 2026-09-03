@@ -38,6 +38,7 @@ Bump ShellCheck pin in both `Makefile` and `.github/workflows/ci.yml` (`SHELLCHE
 ## Pitfalls (do not reintroduce)
 
 - Avoid `cmd | while …` under `set -e` when the loop can fail or must update counters — use a temp file + `while read <file`.
+- Do not pipe into interactive helpers (`pick_multi`): the pipe is not a tty, so the picker never draws and selection is empty. Pass candidates in a file; keep stdin for `read`.
 - Path equality: resolve with `pwd -P` (`resolve_dir`). Linked views resolve to the store; use `view_is_native` when checking “is this the store directory itself?”.
 - Prefer explicit `if` over `A && B || C` for control flow.
 - Character classes like `[a-z]` in `case` can match uppercase under some UTF-8 locales — use `LC_ALL=C` (see `is_safe_skill_name`).

@@ -78,6 +78,10 @@ fi
 _sc_have=$(shellcheck --version | awk '/^version:/{print $2; exit}')
 [ "$_sc_have" = "$_sc_want" ] || fail "shellcheck ${_sc_have}, want ${_sc_want}"
 check "shellcheck clean" shellcheck "$SKILLSYNC" "$ROOT/install.sh" "$ROOT/registry/generate.sh" "$0"
+# pick_multi reads the answer from stdin; a pipe would make [ -t 0 ] fail and
+# silently select nothing (init: "skipped by selection" with no picker).
+check "pick_multi is not on the right of a pipe" \
+	sh -c "! grep -qE '\\|[[:space:]]*pick_multi' '$SKILLSYNC'"
 check "registry has data rows" sh -c "grep -cv '^#\\|^agent_id' '$ROOT/registry/agents.tsv' | grep -q '[0-9]'"
 _ver=$(sed -n 's/^VERSION="\([^"]*\)"$/\1/p' "$SKILLSYNC" | head -n 1)
 [ -n "$_ver" ] || fail "VERSION= not found in bin/skillsync"

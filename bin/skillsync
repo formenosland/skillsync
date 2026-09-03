@@ -143,11 +143,14 @@ spin() {
 	return 1
 }
 
-# Multi-select picker. Args: prompt, candidates (one per line on stdin).
+# Multi-select picker. Args: prompt, file (candidates, one per line).
 # Prints selected lines on stdout. --yes selects everything; non-tty selects none.
+# Candidates must be a file, not stdin: a pipe would steal the tty from `read`.
 pick_multi() {
 	_prompt=$1
-	_items=$(cat)
+	_file=$2
+	[ -n "${_file:-}" ] || return 0
+	_items=$(cat "$_file")
 	[ -n "$_items" ] || return 0
 	if [ "$YES" -eq 1 ]; then
 		printf '%s\n' "$_items"
@@ -790,8 +793,10 @@ cmd_init() {
 			rm -f "$_views" "$_cand"
 			die "non-interactive init requires --yes (skillsync --yes init)"
 		fi
-		_sel=$(awk -F '\t' '{ print $2 "  ->  " $1 }' "$_cand" |
-			pick_multi "link these agent skill folders to the store?")
+		_fmt=$(mktemp)
+		awk -F '\t' '{ print $2 "  ->  " $1 }' "$_cand" >"$_fmt"
+		_sel=$(pick_multi "link these agent skill folders to the store?" "$_fmt")
+		rm -f "$_fmt"
 		while IFS="$TAB" read -r _path _ids; do
 			if printf '%s\n' "$_sel" | grep -qF "$_ids  ->  $_path"; then
 				make_view "$_path" "$_ids"
@@ -916,7 +921,10 @@ $1" ;;
 	if [ "$_all" -eq 1 ]; then
 		_names=$(cmd_list)
 	elif [ -z "$_names" ]; then
-		_names=$(cmd_list | pick_multi "remove which skills?")
+		_ltmp=$(mktemp)
+		cmd_list >"$_ltmp"
+		_names=$(pick_multi "remove which skills?" "$_ltmp")
+		rm -f "$_ltmp"
 		[ -n "$_names" ] || die "specify skill names or use --all (non-interactive)"
 	fi
 
