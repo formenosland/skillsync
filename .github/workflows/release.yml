@@ -12,6 +12,11 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      url: ${{ steps.archive.outputs.url }}
+      sha256: ${{ steps.archive.outputs.sha256 }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -51,10 +56,13 @@ jobs:
         run: |
           set -eu
           if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-            echo "tag=${{ steps.pushed.outputs.tag }}" >> "$GITHUB_OUTPUT"
+            tag="${{ steps.pushed.outputs.tag }}"
           else
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            tag="${GITHUB_REF_NAME}"
           fi
+          version="${tag#v}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Changelog for GitHub Release
         id: notes
@@ -95,8 +103,9 @@ jobs:
           {
             printf '%s\n' "$NOTES"
             printf '\n## Homebrew\n\n'
-            printf 'Tagged source archive for the formula `url` / `sha256` '
-            printf '(GitHub generates this; it is not a Release asset):\n\n'
+            printf 'Tagged source archive (GitHub generates this; it is not a '
+            printf 'Release asset). The Release workflow passes these to '
+            printf 'formenosland/homebrew-tap `.github/workflows/bump.yml`:\n\n'
             printf '```\n%s\nsha256 %s\n```\n' "$URL" "$SHA"
           } > GITHUB_CHANGELOG.md
 
@@ -107,3 +116,16 @@ jobs:
           name: ${{ steps.meta.outputs.tag }}
           body_path: GITHUB_CHANGELOG.md
           generate_release_notes: false
+
+  bump-tap:
+    needs: release
+    uses: formenosland/homebrew-tap/.github/workflows/bump.yml@main
+    with:
+      kind: formula
+      name: skillsync
+      version: ${{ needs.release.outputs.version }}
+      url: ${{ needs.release.outputs.url }}
+      sha256: ${{ needs.release.outputs.sha256 }}
+    secrets:
+      HOMEBREW_TAP_APP_ID: ${{ secrets.HOMEBREW_TAP_APP_ID }}
+      HOMEBREW_TAP_APP_PRIVATE_KEY: ${{ secrets.HOMEBREW_TAP_APP_PRIVATE_KEY }}

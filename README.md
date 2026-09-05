@@ -44,7 +44,7 @@ brew install formenosland/tap/skillsync
 curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
 ```
 
-Homebrew tracks tagged releases via [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap). The curl installer also installs the latest GitHub release (re-run to update). From a checkout, `./install.sh` copies that tree with no network. Do not mix the two on `PATH` unless you know which binary wins.
+Homebrew tracks tagged releases via [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap); each GitHub Release bumps `Formula/skillsync.rb` through that tap’s `bump.yml` workflow. The curl installer also installs the latest GitHub release (re-run to update). From a checkout, `./install.sh` copies that tree with no network. Do not mix the two on `PATH` unless you know which binary wins.
 
 <details>
 <summary>Override the git ref</summary>

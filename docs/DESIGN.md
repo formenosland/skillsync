@@ -162,7 +162,7 @@ The reference CLI is installed out-of-band from skill data:
 | Application (Homebrew) | keg under the Homebrew prefix (`libexec` + `bin/skillsync` symlink) |
 | Skill config / data | `${XDG_CONFIG_HOME:-~/.config}/skillsync/` and `${XDG_DATA_HOME:-~/.local/share}/skillsync/` (store, sources, backups) |
 
-Install/update is either Homebrew or a pipe-safe `install.sh`. Homebrew is the formula in [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap) (`brew install formenosland/tap/skillsync`); it uses GitHub’s tagged source archive, not a custom binary. Curl:
+Install/update is either Homebrew or a pipe-safe `install.sh`. Homebrew is the formula in [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap) (`brew install formenosland/tap/skillsync`); it uses GitHub’s tagged source archive, not a custom binary. The skillsync Release workflow hashes that archive and calls the tap’s reusable `bump.yml` so `url` / `sha256` stay in lockstep with the tag. Curl:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
