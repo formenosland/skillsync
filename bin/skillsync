@@ -15,7 +15,7 @@
 
 set -e
 
-VERSION="0.3.0"
+VERSION="0.3.1"
 
 # --- locations (XDG base dirs; SKILLSYNC_HOME forces a single root) ----------
 
