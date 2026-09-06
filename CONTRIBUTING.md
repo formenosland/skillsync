@@ -72,7 +72,7 @@ That tag marks the first public preview. Later `fix:` / `feat:` commits become `
 
 Ship a release from `main` after merging conventional commits:
 
-1. GitHub → Actions → **Release** → **Run workflow**, or locally: `cog bump --auto` then `git push origin HEAD` and `git push origin vX.Y.Z`.
+1. GitHub → Actions → **Release** → **Run workflow** (bump defaults to `auto` from conventional commits; optionally choose `major` / `minor` / `patch` to force that increment), or locally: `cog bump --auto` (or `--major` / `--minor` / `--patch`) then `git push origin HEAD` and `git push origin vX.Y.Z`.
 2. The Release workflow publishes a GitHub Release from `cog changelog --at <tag>` and hashes GitHub’s tagged source archive (not a Release asset).
 3. A following job calls [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap) `.github/workflows/bump.yml` with that `url` / `sha256` / version. It opens a formula PR, waits for tap CI, and squash-merges. `brew upgrade` follows that merge. `install.sh` (curl) tracks the GitHub Release tag as soon as it exists. `SKILLSYNC_INSTALL_REF` is only an override for curl (specific tag, or `main` for HEAD).
 

@@ -2,6 +2,17 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump (default follows conventional commits)
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - major
+          - minor
+          - patch
   push:
     tags:
       - "v[0-9]*"
@@ -33,7 +44,7 @@ jobs:
         uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20 # v4.1.0
         with:
           command: bump
-          args: --auto
+          args: --${{ github.event.inputs.bump }}
           # github-actions[bot] user id 41898282; GitHub noreply form so
           # the bump commit is attributed to the Actions bot.
           # https://api.github.com/users/github-actions%5Bbot%5D
