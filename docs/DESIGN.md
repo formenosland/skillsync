@@ -1,6 +1,6 @@
 # skillsync — Design & Specification
 
-**Status:** Stable (v0.2 series) · **Maintainer:** formenos.land
+**Status:** Stable (v0.3 series) · **Maintainer:** formenos.land
 
 skillsync defines a vendor-neutral convention for installing and managing AI agent skills across tools, scopes, and organizational boundaries: a canonical skill store with per-agent directory views and layered source manifests. This document is the reference for the design; the [README](../README.md) covers day-to-day usage.
 
@@ -24,16 +24,16 @@ A developer using Claude Code, Cursor, Codex, and Copilot may maintain four copi
 
 - **Project scope** is converging on `.agents/skills/` (Codex, Cursor, Gemini CLI, Copilot, Zed, Cline, Warp, Amp, …).
 - **The SKILL.md format** is standardized and interoperable.
-- **The vercel-labs `skills` CLI** (`npx skills add …`) installs into agent-specific paths — useful, but multiplies installs per agent.
+- **The vercel-labs `skills` CLI** (`npx skills add …`) fetches skills into chosen agent (and project) directories — useful distribution, a different layout model.
 
-What's missing is a **unified global layer** with org/user precedence and a single write path.
+What's missing is a **unified global layer** with org/user precedence and a single write path (one store, many views).
 
 ## 2. Prior Art
 
 | System | Analogy |
 |--------|---------|
 | [agentskills.io](https://agentskills.io) | Skill *format* spec — what a skill is |
-| [vercel-labs/skills](https://github.com/vercel-labs/skills) | Per-agent installer CLI; also the maintained agent-path map this design builds on |
+| [vercel-labs/skills](https://github.com/vercel-labs/skills) | Per-agent installer + discovery; overlapping agent-path list (optional registry refresh) |
 | **GNU Stow** | Symlink farm — one source tree, many "views" |
 | **XDG Base Directory** | Predictable config/data locations without home-dir clutter |
 | **npm / cargo / go modules** | Manifest + lock + vendor dir (heavier than needed here) |
@@ -102,7 +102,7 @@ Within each source, skill directories (containing `SKILL.md`) are found at depth
 
 `registry/agents.tsv` maps agent ids to global and project paths. Requirements:
 
-- **Generated, not hand-written.** The registry derives from the maintained agent map in vercel-labs/skills (`src/agents.ts`), pinned to a commit recorded in the file header. `registry/generate.sh` regenerates it; the output is committed so the tool needs no network at runtime.
+- **Generated, not hand-written.** The committed TSV is produced by `registry/generate.sh`. That script can refresh rows from vercel-labs/skills `src/agents.ts` (pinned SHA in the file header) so path coverage stays aligned with that CLI; runtime still needs no network. This is a maintenance convenience, not the origin of the store/view model.
 - **Expressive paths.** Rows may use `~`, `${VAR:-default}` (env-overridable homes such as `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`), and `|`-separated alternates (first whose parent directory exists wins — e.g. OpenClaw's `~/.openclaw` → `~/.clawdbot` → `~/.moltbot`).
 - **Project-only agents** carry `-` as global path and get no view.
 - **Local override:** `~/.config/skillsync/agents.local.tsv` (same format) merges over the shipped registry, winning by `agent_id`. Users can add unlisted agents or correct paths without touching the installation.
@@ -185,7 +185,7 @@ For formenos.land tools the planned stable URL is `https://get.formenos.land/<to
 
 **Long term** — vendors should converge on *one shared global path* (the ecosystem is drifting toward `~/.agents/skills/`) and keep `.agents/skills/` for projects. Whatever the convergence point turns out to be, skillsync treats it as just another view, so users are covered before, during, and after the transition.
 
-**Registry maintenance** — upstream additions land in vercel-labs/skills; regenerating the registry picks them up. Users bridge gaps instantly via `agents.local.tsv`.
+**Registry maintenance** — regenerating from vercel-labs/skills `agents.ts` is optional coverage sync. Users bridge gaps instantly via `agents.local.tsv`.
 
 ## 9. Out of Scope
 
@@ -206,6 +206,6 @@ For formenos.land tools the planned stable URL is `https://get.formenos.land/<to
 ## 11. References
 
 - [Agent Skills Specification](https://agentskills.io)
-- [vercel-labs/skills](https://github.com/vercel-labs/skills) — CLI and maintained agent path map
+- [vercel-labs/skills](https://github.com/vercel-labs/skills) — per-agent installer and discovery CLI
 - [GNU Stow](https://www.gnu.org/software/stow/)
 - [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)

@@ -7,7 +7,7 @@
 [![CI](https://github.com/formenosland/skillsync/actions/workflows/ci.yml/badge.svg)](https://github.com/formenosland/skillsync/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/formenosland/skillsync)](https://github.com/formenosland/skillsync/releases)
 
-AI coding agents support [Agent Skills](https://agentskills.io) — but each one wants them in its own folder (`~/.claude/skills`, `~/.codex/skills`, `~/.cursor/skills`, …). Multiply that by org, personal, and project scopes, and skills management becomes an N × M mess.
+AI coding agents support [Agent Skills](https://agentskills.io) — but each one wants them in its own folder (`~/.claude/skills`, `~/.codex/skills`, `~/.cursor/skills`, …). The same skill ends up copied into many global directories, and org vs personal sources have no merge rule.
 
 **skillsync** ends it with a *one store, many views* model (think GNU Stow, for agent skills):
 
@@ -142,19 +142,31 @@ Everything lives in XDG paths (no new dotfolder in your home):
 
 ## Supported agents
 
-[`registry/agents.tsv`](registry/agents.tsv) covers ~75 agents — Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, OpenCode, Zed, Cline, Warp, Goose, Windsurf, Kiro, Junie, Amp, Hermes, OpenClaw, and more. It is **generated, never hand-edited**, from the maintained agent map in [vercel-labs/skills](https://github.com/vercel-labs/skills), pinned to a commit recorded in the file header:
-
-```sh
-registry/generate.sh [newer-commit-sha]   # refresh from upstream
-```
-
-The registry handles env-overridable homes (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`, …) and fallback chains (OpenClaw's `~/.openclaw` → `~/.clawdbot` → `~/.moltbot`). `init` only links agents that are actually installed — it never litters your home directory.
+[`registry/agents.tsv`](registry/agents.tsv) covers ~75 agents — Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, OpenCode, Zed, Cline, Warp, Goose, Windsurf, Kiro, Junie, Amp, Hermes, OpenClaw, and more. It is **generated, never hand-edited** (see [Contributing](CONTRIBUTING.md) to refresh it). Paths may use env-overridable homes (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`, …) and `|` fallback chains (OpenClaw's `~/.openclaw` → `~/.clawdbot` → `~/.moltbot`). `init` only links agents that are actually installed — it never litters your home directory.
 
 Agent missing or path wrong? Add a row to `~/.config/skillsync/agents.local.tsv` (same TSV format; wins by `agent_id`) — and please open an issue or PR.
 
-## Interop
+## Compared to vercel-labs/skills
 
-The [vercel `skills` CLI](https://github.com/vercel-labs/skills) (`npx skills add …`) keeps working: it installs into agent directories, which are views into the same store after `init`. Skills added by either tool appear everywhere.
+[vercel-labs/skills](https://github.com/vercel-labs/skills) (`npx skills`) and skillsync solve adjacent jobs. Neither replaces the other; the table is approach, not ranking.
+
+| | skillsync | vercel-labs/skills |
+|---|---|---|
+| Skill format | [Agent Skills](https://agentskills.io) (`SKILL.md`) | same |
+| Git / local sources | git URL, `owner/repo`, local path | same, plus GitLab, archives, direct file URLs |
+| Agent coverage | ~75 filesystem agents | same ecosystem (overlapping path list) |
+| Layout | one canonical store; each agent's **skills directory** is a view (Stow) | install **into each chosen agent directory** (per-skill symlink or copy) |
+| Merge / precedence | `org` < `user` < `local` | project directory vs `-g` global |
+| Project skills (`.agents/skills/` in a repo) | not managed — the repo owns them | default install scope |
+| Discovery / marketplace | out of scope ([skills.sh](https://skills.sh) if you want it) | `skills find`, skills.sh |
+| Use without installing | — | `skills use` (temp files + prompt) |
+| Author a skill template | — | `skills init` |
+| Runtime | POSIX `sh`, `git`, `ln` | Node (`npx`) |
+| Telemetry | none | on by default (`DISABLE_TELEMETRY` / `DO_NOT_TRACK`) |
+| Install safety | owns only store/view **links**; never deletes skill files | writes/removes under agent skill dirs |
+| Diagnose layout | `doctor` (drifted views, broken links) | — |
+
+After `skillsync init`, agent folders are views into the store, so `npx skills add …` still works: it writes into a view and the skill is visible to every linked agent.
 
 ## FAQ
 

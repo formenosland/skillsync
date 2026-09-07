@@ -119,4 +119,5 @@ NO_COLOR=1                    # plain output
 
 Shell completion: `eval "$(skillsync completion bash)"` (or `zsh`).
 Full design: `docs/DESIGN.md`. Registry: `registry/agents.tsv`
-(generated from vercel-labs/skills; regenerate via `registry/generate.sh`).
+(generated file; do not hand-edit). Local path overrides:
+`agents.local.tsv`.
