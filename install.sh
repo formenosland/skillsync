@@ -36,17 +36,16 @@ if [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
 	C_DIM=$(printf '\033[2m')
 	C_GREEN=$(printf '\033[32m')
 	C_YELLOW=$(printf '\033[33m')
-	C_CYAN=$(printf '\033[36m')
 	C_RESET=$(printf '\033[0m')
 	S_OK="✓"
 else
-	C_BOLD="" C_DIM="" C_GREEN="" C_YELLOW="" C_CYAN="" C_RESET=""
+	C_BOLD="" C_DIM="" C_GREEN="" C_YELLOW="" C_RESET=""
 	S_OK="+"
 fi
 
-info() { printf '%s\n' "${C_CYAN}skillsync install:${C_RESET} $*" >&2; }
-ok() { printf '%s\n' "${C_GREEN}${S_OK}${C_RESET} $*" >&2; }
-warn() { printf '%s\n' "${C_YELLOW}!${C_RESET} $*" >&2; }
+info() { printf '%s\n' "${C_BOLD}skillsync install${C_RESET} $*" >&2; }
+ok() { printf '%s\n' "  ${C_GREEN}${S_OK}${C_RESET} $*" >&2; }
+warn() { printf '%s\n' "  ${C_YELLOW}!${C_RESET} $*" >&2; }
 die() { warn "$*"; exit 1; }
 
 confirm() {

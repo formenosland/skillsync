@@ -26,7 +26,7 @@ Lint rules: [`.shellcheckrc`](.shellcheckrc) (native ShellCheck config). Version
 - Tabs for indentation in shell scripts.
 - `make shellcheck` must pass (ShellCheck v0.11.0 + `.shellcheckrc`). Intentional idiom exceptions use file-level `# shellcheck disable=` with a reason comment.
 - Keep the ownership invariant sacred: *skillsync owns the store; humans own sources.* No code path may delete skill files — only symlinks we created. Anything replaced (not removed) is backed up first.
-- User-facing output goes through the `ui_*` helpers so it degrades correctly (non-tty, `NO_COLOR`, `TERM=dumb`). Machine output (`list`, `completion`) goes to stdout, plain.
+- User-facing output goes through the `ui_*` helpers so it degrades correctly (non-tty, `NO_COLOR`, `TERM=dumb`). Machine output (`list --names`, `completion`) goes to stdout, plain. `list` on a tty (or `--pretty`) is a catalog.
 
 ## Tests
 

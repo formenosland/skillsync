@@ -52,7 +52,8 @@ skillsync remove terse               # gone from every agent, instantly
 skillsync remove                     # interactive picker (tty, no args)
 skillsync --yes remove --all         # remove every installed skill (scripts)
 skillsync remove --source ~/dev/my-skills
-skillsync list                       # plain names (scripts, completion)
+skillsync list                       # catalog on a tty; names when piped
+skillsync list --names               # always one name per line (completion)
 skillsync status                     # skills, origins, view states
 skillsync doctor                     # exit 1 on actionable findings only
 skillsync uninstall                  # remove views; store/config kept

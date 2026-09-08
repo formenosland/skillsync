@@ -130,7 +130,7 @@ Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud l
 | `remove` | Delete the skill's store symlink (visible everywhere instantly) and record the name in `exclude.conf` so sync won't restore it. No backups — source files are never touched, so nothing is lost. Refuses unmanaged entries. Bare `remove` on a tty opens a picker; without names, non-interactive use requires skill arguments or `--all` (`skillsync --yes remove --all` removes everything). |
 | `remove --all` | Remove every skill currently in the store (same per-skill semantics as `remove <name>`). |
 | `remove --source` | Drop the manifest entry, delete the clone (managed clones only — local folders are kept), remove its store links, re-materialize. |
-| `list` | Plain skill names for scripts and shell completion. |
+| `list` | On a tty: skills grouped by source, with the first line of each `description`. Piped / `--names` (`-1`): plain names for scripts and completion. `--pretty` forces the catalog. |
 | `status` | Skills with origins, agent view states, sources, excludes. |
 | `doctor` | Broken links, drifted views (agent recreated a real folder), wrong links, missing sources, unlinked installed agents, cross-layer collisions (informational). Exit 1 on actionable findings. |
 | `uninstall` | Reverse of init: remove all view symlinks (default), or convert views to real copies (`--keep`). `--purge` deletes all skillsync data after typing the confirmation word `nuke`; global `--yes` skips that prompt. |

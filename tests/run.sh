@@ -106,6 +106,7 @@ check "skill visible through view" test -f "$HOME_DIR/.claude/skills/oldskill/SK
 
 OUT=$(s init 2>&1)
 check "second init reports already linked" out_has 'already linked'
+check "init uses quiet catalog chrome" out_lacks '◆|└'
 
 # --- 2. add, layers, precedence, idempotent sync -------------------------------
 
@@ -127,6 +128,21 @@ OUT=$(s list)
 check "list shows alpha" out_has alpha
 check "list shows beta" out_has beta
 check "list shows oldskill" out_has oldskill
+check "piped list is names only" out_lacks 'test skill'
+check "piped list has no catalog header" out_lacks 'skillsync list'
+
+OUT=$(s list --pretty)
+check "pretty lists alpha" out_has alpha
+check "pretty groups org path" out_has src-org
+check "pretty groups user path" out_has src-user
+check "pretty shows local group" out_has local
+check "pretty shows description" out_has 'test skill alpha'
+check "pretty shows layer org" out_has '  org'
+check "pretty catalog has no tree chrome" out_lacks 'skill(s)|skillsync list'
+
+OUT=$(s list --names)
+check "list --names is still a name" out_has alpha
+check "list --names stays unadorned" out_lacks 'test skill'
 
 # --- 3. remove: exclusion, re-add, dry-run --------------------------------------
 

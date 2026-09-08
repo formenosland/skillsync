@@ -17,10 +17,18 @@ AI coding agents support [Agent Skills](https://agentskills.io) — but each one
 
 ```console
 $ skillsync add acme-corp/skills --layer org
-◆ skillsync add (org) https://github.com/acme-corp/skills
-│ ✓ code-review (org)
-│ ✓ terse (org)
-└ add done (2 ok, 0 warnings)
+skillsync add (org) https://github.com/acme-corp/skills
+  ✓ code-review (org)
+  ✓ terse (org)
+add done (2 ok, 0 warnings)
+
+$ skillsync list
+acme-corp/skills  org
+  code-review     Review PRs against team standards
+  terse           Ultra-compressed communication
+
+local  local
+  five-whys       Cheap causal gate on desires
 
 $ skillsync status
 Agent views
@@ -81,7 +89,7 @@ skillsync sync                                  # pull sources, refresh everywhe
 | `remove [names...]` (`rm`) | Remove skills from everywhere; bare `remove` opens an interactive picker |
 | `remove --all` | Remove every installed skill (use `skillsync --yes remove --all` in scripts) |
 | `remove --source <url\|path>` | Unregister a source and drop its skills |
-| `list` (`ls`) | Installed skill names, one per line |
+| `list` (`ls`) | Catalog grouped by source with descriptions (tty); one name per line when piped. `--pretty` / `--names` (`-1`) force either form |
 | `status` | Rich overview: skills, origins, agent view states, sources |
 | `doctor` | Diagnose broken links, drifted views, missing links (exit 1 on actionable findings; warnings alone do not fail) |
 | `uninstall [--keep] [--purge]` (`nuke`) | Reverse `init` (see below) |
@@ -174,7 +182,7 @@ After `skillsync init`, agent folders are views into the store, so `npx skills a
 
 **Windows?** Not yet — symlink semantics differ. `--copy` exists as a stopgap; proper support is future work.
 
-**Is output scriptable?** Yes: colors and symbols degrade automatically when piped (or with `NO_COLOR`/`TERM=dumb`), `list` emits plain names, global `--yes` skips confirmations (including the `nuke` typed confirm for `--purge`), and `doctor` exits 1 only for actionable problems (broken links, drifted/wrong/missing views)—not for informational warnings such as layer collisions or missing clones.
+**Is output scriptable?** Yes: colors and symbols degrade automatically when piped (or with `NO_COLOR`/`TERM=dumb`), `list` emits plain names when piped (or with `--names`), global `--yes` skips confirmations (including the `nuke` typed confirm for `--purge`), and `doctor` exits 1 only for actionable problems (broken links, drifted/wrong/missing views)—not for informational warnings such as layer collisions or missing clones.
 
 ## Documentation
 

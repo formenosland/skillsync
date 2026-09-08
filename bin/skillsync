@@ -64,11 +64,11 @@ if [ -t 2 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
 	C_GREEN=$(printf '\033[32m')
 	C_YELLOW=$(printf '\033[33m')
 	C_CYAN=$(printf '\033[36m')
-	S_STEP="◆" S_OK="✓" S_WARN="▲" S_ERR="✗" S_BAR="│" S_END="└"
+	S_OK="✓" S_WARN="▲" S_ERR="✗"
 	FANCY=1
 else
 	C_RESET="" C_BOLD="" C_DIM="" C_RED="" C_GREEN="" C_YELLOW="" C_CYAN=""
-	S_STEP="*" S_OK="+" S_WARN="!" S_ERR="x" S_BAR="|" S_END="\`"
+	S_OK="+" S_WARN="!" S_ERR="x"
 	FANCY=0
 fi
 
@@ -76,29 +76,29 @@ N_OK=0
 N_WARN=0
 
 ui_header() {
-	printf '%s\n' "${C_CYAN}${S_STEP}${C_RESET} ${C_BOLD}$*${C_RESET}" >&2
+	printf '%s\n' "${C_BOLD}$*${C_RESET}" >&2
 }
 
 ui_ok() {
 	N_OK=$((N_OK + 1))
-	printf '%s\n' "${C_DIM}${S_BAR}${C_RESET} ${C_GREEN}${S_OK}${C_RESET} $*" >&2
+	printf '%s\n' "  ${C_GREEN}${S_OK}${C_RESET} $*" >&2
 }
 
 ui_info() {
-	printf '%s\n' "${C_DIM}${S_BAR}${C_RESET} ${C_DIM}$*${C_RESET}" >&2
+	printf '%s\n' "  ${C_DIM}$*${C_RESET}" >&2
 }
 
 ui_warn() {
 	N_WARN=$((N_WARN + 1))
-	printf '%s\n' "${C_DIM}${S_BAR}${C_RESET} ${C_YELLOW}${S_WARN} $*${C_RESET}" >&2
+	printf '%s\n' "  ${C_YELLOW}${S_WARN}${C_RESET} $*" >&2
 }
 
 ui_err() {
-	printf '%s\n' "${C_DIM}${S_BAR}${C_RESET} ${C_RED}${S_ERR} $*${C_RESET}" >&2
+	printf '%s\n' "  ${C_RED}${S_ERR}${C_RESET} $*" >&2
 }
 
 ui_end() {
-	printf '%s\n' "${C_DIM}${S_END}${C_RESET} $*" >&2
+	printf '%s\n' "$*" >&2
 }
 
 die() {
@@ -123,7 +123,7 @@ spin() {
 		while kill -0 "$_pid" 2>/dev/null; do
 			_i=$(( (_i + 1) % 4 ))
 			_f=$(printf '%s' "$_frames" | cut -c$((_i + 1)))
-			printf '\r%s %s %s ' "${C_DIM}${S_BAR}${C_RESET}" "${C_CYAN}${_f}${C_RESET}" "$_label" >&2
+			printf '\r  %s %s ' "${C_CYAN}${_f}${C_RESET}" "$_label" >&2
 			sleep 0.1
 		done
 		printf '\r\033[K' >&2
@@ -138,7 +138,7 @@ spin() {
 		fi
 	fi
 	ui_err "$_label failed:"
-	sed 's/^/    /' "$_out" >&2
+	sed 's/^/  /' "$_out" >&2
 	rm -f "$_out"
 	return 1
 }
@@ -159,13 +159,13 @@ pick_multi() {
 	if ! [ -t 0 ] || ! [ -t 2 ]; then
 		return 0
 	fi
-	printf '%s\n' "${C_DIM}${S_BAR}${C_RESET} ${C_BOLD}${_prompt}${C_RESET}" >&2
+	printf '%s\n' "${C_BOLD}${_prompt}${C_RESET}" >&2
 	_n=0
 	printf '%s\n' "$_items" | while IFS= read -r _it; do
 		_n=$((_n + 1))
-		printf '%s\n' "${C_DIM}${S_BAR}${C_RESET}   ${C_CYAN}${_n}${C_RESET}) $_it" >&2
+		printf '%s\n' "  ${C_BOLD}${_n}${C_RESET}) $_it" >&2
 	done
-	printf '%s ' "${C_DIM}${S_BAR}${C_RESET} numbers (space-separated), or ${C_BOLD}all${C_RESET}:" >&2
+	printf '%s ' "  numbers (space-separated), or ${C_BOLD}all${C_RESET}:" >&2
 	read -r _sel || _sel="all"
 	[ -n "$_sel" ] || _sel="all"
 	if [ "$_sel" = "all" ] || [ "$_sel" = "a" ]; then
@@ -189,7 +189,7 @@ confirm() {
 	if ! [ -t 0 ]; then
 		return 1
 	fi
-	printf '%s %s [y/N] ' "${C_DIM}${S_BAR}${C_RESET}" "$_msg" >&2
+	printf '%s [y/N] ' "$_msg" >&2
 	read -r _ans || _ans=""
 	case $_ans in
 		y | Y | yes | YES) return 0 ;;
@@ -210,8 +210,8 @@ confirm_typed() {
 	if ! [ -t 0 ]; then
 		return 1
 	fi
-	printf '%s %s\n' "${C_DIM}${S_BAR}${C_RESET}" "${C_RED}${_msg}${C_RESET}" >&2
-	printf '%s type %s%s%s to continue: ' "${C_DIM}${S_BAR}${C_RESET}" "$C_BOLD" "$_word" "$C_RESET" >&2
+	printf '%s\n' "${C_RED}${_msg}${C_RESET}" >&2
+	printf 'type %s%s%s to continue: ' "$C_BOLD" "$_word" "$C_RESET" >&2
 	read -r _ans || _ans=""
 	[ "$_ans" = "$_word" ]
 }
@@ -349,6 +349,133 @@ is_safe_skill_name() {
 	[ -n "$1" ] || return 1
 	[ "${#1}" -le 64 ] || return 1
 	printf '%s\n' "$1" | LC_ALL=C grep -Eq '^[a-z0-9]+(-[a-z0-9]+)*$'
+}
+
+# First line of YAML description (folded/literal blocks included). Empty if none.
+get_skill_blurb() {
+	_dir=$1
+	[ -f "$_dir/SKILL.md" ] || return 0
+	awk '
+		BEGIN { in_fm = 0; in_desc = 0 }
+		/^---[[:space:]]*$/ {
+			if (!in_fm) { in_fm = 1; next }
+			exit
+		}
+		!in_fm { next }
+		in_desc {
+			if ($0 ~ /^[A-Za-z0-9_-]+:/) exit
+			line = $0
+			sub(/^[[:space:]]+/, "", line)
+			if (line == "") next
+			print line
+			exit
+		}
+		/^description:[[:space:]]*/ {
+			line = $0
+			sub(/^description:[[:space:]]*/, "", line)
+			if (line == ">" || line == "|" || line == ">-" || line == "|-" || line == "" ) {
+				in_desc = 1
+				next
+			}
+			gsub(/^["'\'']|["'\'']$/, "", line)
+			print line
+			exit
+		}
+	' "$_dir/SKILL.md" | tr -d '\r' | tr '\t' ' '
+}
+
+# Truncate $1 to ~72 columns; ellipsis when trimmed.
+shorten_blurb() {
+	_b=$1
+	[ -n "$_b" ] || return 0
+	if [ "${#_b}" -gt 72 ]; then
+		_b=$(printf '%s' "$_b" | cut -c1-71)
+		if [ "$FANCY" -eq 1 ]; then
+			printf '%s…' "$_b"
+		else
+			printf '%s...' "$_b"
+		fi
+	else
+		printf '%s' "$_b"
+	fi
+}
+
+compact_home() {
+	case $1 in
+		"$HOME") printf '~' ;;
+		"$HOME"/*) printf '~/%s' "${1#"$HOME"/}" ;;
+		*) printf '%s' "$1" ;;
+	esac
+}
+
+# Manifest URL/path -> short group heading (owner/repo or ~/path).
+source_heading() {
+	_src=$1
+	if is_git_url "$_src"; then
+		_u=$(normalize_git_url "$_src")
+		printf '%s' "$_u" | sed 's#^https\{0,1\}://##; s#^git@##; s#:#/#; s#\.git$##; s#^github\.com/##'
+	else
+		_p=$(expand_one_path "$_src")
+		_r=$(resolve_dir "$_p") || _r=$_p
+		compact_home "$_r"
+	fi
+}
+
+# Index of source roots: resolved_root<TAB>layer<TAB>heading
+source_group_index() {
+	_local_res=$(resolve_dir "$LOCAL_SOURCE") || _local_res=$LOCAL_SOURCE
+	printf '%s\tlocal\tlocal\n' "$_local_res"
+	_itmp=$(mktemp)
+	manifest_entries >"$_itmp" || true
+	while IFS= read -r _line; do
+		[ -n "$_line" ] || continue
+		_layer=${_line%% *}
+		_src=${_line#* }
+		_root=$(source_clone_path "$_src")
+		_root_res=$(resolve_dir "$_root") || continue
+		_head=$(source_heading "$_src")
+		printf '%s\t%s\t%s\n' "$_root_res" "$_layer" "$_head"
+	done <"$_itmp"
+	rm -f "$_itmp"
+}
+
+# Store entry -> layer<TAB>heading (longest matching source root).
+skill_list_group() {
+	_e=$1
+	_idx=$2
+	if is_real_dir "$_e"; then
+		printf 'unmanaged\tunmanaged'
+		return 0
+	fi
+	if is_symlink "$_e" && [ ! -e "$_e" ]; then
+		printf '?\t(broken)'
+		return 0
+	fi
+	_t=$(resolve_dir "$_e") || _t=""
+	[ -n "$_t" ] || {
+		printf '?\t(broken)'
+		return 0
+	}
+	_hit=$(awk -F '\t' -v t="$_t" '
+		{
+			root = $1
+			if (t == root || index(t, root "/") == 1) {
+				if (length(root) >= bestlen) {
+					bestlen = length(root)
+					layer = $2
+					heading = $3
+				}
+			}
+		}
+		END {
+			if (bestlen > 0) printf "%s\t%s", layer, heading
+		}
+	' "$_idx")
+	if [ -z "$_hit" ]; then
+		printf 'user\t%s' "$(compact_home "$_t")"
+	else
+		printf '%s' "$_hit"
+	fi
 }
 
 # Frontmatter name: if set, else directory basename. Empty when neither is safe.
@@ -880,12 +1007,95 @@ cmd_sync() {
 	ui_end "sync done ${C_DIM}($N_OK ok, $N_WARN warnings)${C_RESET}"
 }
 
-cmd_list() {
+list_skill_names() {
 	[ -d "$STORE" ] || return 0
 	for _e in "$STORE"/*; do
 		{ [ -e "$_e" ] || [ -L "$_e" ]; } || continue
 		basename "$_e"
 	done
+}
+
+list_skills_pretty() {
+	_lc_reset="" _lc_bold="" _lc_dim=""
+	if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
+		_lc_reset=$C_RESET
+		_lc_bold=$C_BOLD
+		_lc_dim=$C_DIM
+	fi
+	_idx=$(mktemp)
+	_rows=$(mktemp)
+	source_group_index >"$_idx"
+	if [ -d "$STORE" ]; then
+		for _e in "$STORE"/*; do
+			{ [ -e "$_e" ] || [ -L "$_e" ]; } || continue
+			_n=$(basename "$_e")
+			_g=$(skill_list_group "$_e" "$_idx")
+			_blurb=$(shorten_blurb "$(get_skill_blurb "$_e")")
+			printf '%s\t%s\t%s\n' "$_n" "$_g" "$_blurb" >>"$_rows"
+		done
+	fi
+	rm -f "$_idx"
+	if [ ! -s "$_rows" ]; then
+		rm -f "$_rows"
+		printf '%s\n' "${_lc_dim}(empty — run init / add)${_lc_reset}"
+		return 0
+	fi
+	_sorted=$(mktemp)
+	sort -t "$TAB" -k3,3 -k1,1 "$_rows" >"$_sorted"
+	rm -f "$_rows"
+	_w=$(awk -F '\t' '{
+		if (length($1) > m) m = length($1)
+	} END {
+		if (m < 12) m = 12
+		if (m > 32) m = 32
+		print m
+	}' "$_sorted")
+	awk -F '\t' -v w="$_w" \
+		-v b="${_lc_bold}" -v d="${_lc_dim}" -v r="${_lc_reset}" '
+		{
+			name = $1
+			layer = $2
+			heading = $3
+			blurb = $4
+			if (heading != prevh || layer != prevl) {
+				if (NR > 1) print ""
+				printf "%s%s%s  %s%s%s\n", b, heading, r, d, layer, r
+				prevh = heading
+				prevl = layer
+			}
+			pad = w - length(name)
+			if (pad < 1) pad = 1
+			spaces = sprintf("%" pad "s", "")
+			if (blurb != "")
+				printf "  %s%s%s%s  %s%s%s\n", b, name, r, spaces, d, blurb, r
+			else
+				printf "  %s%s%s\n", b, name, r
+		}
+	' "$_sorted"
+	rm -f "$_sorted"
+}
+
+cmd_list() {
+	_pretty=0
+	_names=0
+	while [ $# -gt 0 ]; do
+		case $1 in
+			--pretty) _pretty=1 ;;
+			--names | -1) _names=1 ;;
+			-*) die "unknown option for list: $1" ;;
+			*) die "unexpected argument: $1" ;;
+		esac
+		shift
+	done
+	if [ "$_names" -eq 1 ]; then
+		list_skill_names
+		return 0
+	fi
+	if [ "$_pretty" -eq 1 ] || [ -t 1 ]; then
+		list_skills_pretty
+	else
+		list_skill_names
+	fi
 }
 
 cmd_remove() {
@@ -919,10 +1129,10 @@ $1" ;;
 	fi
 
 	if [ "$_all" -eq 1 ]; then
-		_names=$(cmd_list)
+		_names=$(list_skill_names)
 	elif [ -z "$_names" ]; then
 		_ltmp=$(mktemp)
-		cmd_list >"$_ltmp"
+		list_skill_names >"$_ltmp"
 		_names=$(pick_multi "remove which skills?" "$_ltmp")
 		rm -f "$_ltmp"
 		[ -n "$_names" ] || die "specify skill names or use --all (non-interactive)"
@@ -1007,8 +1217,8 @@ remove_source() {
 
 cmd_status() {
 	printf '%sskillsync %s%s\n' "$C_BOLD" "$VERSION" "$C_RESET"
-	printf 'store:  %s\n' "$STORE"
-	printf 'config: %s\n\n' "$CONFIG_DIR"
+	printf '  %sstore%s   %s\n' "$C_DIM" "$C_RESET" "$STORE"
+	printf '  %sconfig%s  %s\n\n' "$C_DIM" "$C_RESET" "$CONFIG_DIR"
 
 	printf '%sSkills%s\n' "$C_BOLD" "$C_RESET"
 	_count=0
@@ -1028,11 +1238,11 @@ cmd_status() {
 			else
 				_o="${C_YELLOW}unmanaged${C_RESET}"
 			fi
-			printf '  %-26s %s\n' "$_n" "$_o"
+			printf '  %s%-26s%s %s%s%s\n' "$C_BOLD" "$_n" "$C_RESET" "$C_DIM" "$_o" "$C_RESET"
 			_count=$((_count + 1))
 		done
 	fi
-	[ "$_count" -eq 0 ] && printf '  (empty — run init / add)\n'
+	[ "$_count" -eq 0 ] && printf '  %s(empty — run init / add)%s\n' "$C_DIM" "$C_RESET"
 
 	printf '\n%sAgent views%s\n' "$C_BOLD" "$C_RESET"
 	view_paths | while IFS="$TAB" read -r _path _ids; do
@@ -1205,7 +1415,7 @@ _skillsync() {
 	fi
 	case "${COMP_WORDS[1]}" in
 		remove | rm)
-			COMPREPLY=($(compgen -W "$(skillsync list 2>/dev/null) --source --all" -- "$cur"))
+			COMPREPLY=($(compgen -W "$(skillsync list --names 2>/dev/null) --source --all" -- "$cur"))
 			;;
 		add)
 			COMPREPLY=($(compgen -W "--layer" -- "$cur"))
@@ -1235,7 +1445,7 @@ _skillsync() {
 	case $words[2] in
 		remove | rm)
 			local -a skills
-			skills=(${(f)"$(skillsync list 2>/dev/null)"})
+			skills=(${(f)"$(skillsync list --names 2>/dev/null)"})
 			_describe 'skill' skills
 			;;
 		add) _arguments '--layer[layer]:(org user)' ;;
@@ -1268,7 +1478,8 @@ ${C_BOLD}Commands:${C_RESET}
   remove [names...] (rm)      Remove skills everywhere (picker when tty, no args)
   remove --all                Remove every installed skill
   remove --source <url|path>  Unregister a source and its skills
-  list (ls)                   Installed skill names, one per line
+  list (ls)                   Skills grouped by source (tty); names when piped
+                              --pretty always catalog; --names / -1 always names
   status                      Skills, views, sources overview
   doctor                      Diagnose problems (exit 1 if issues)
   uninstall [--keep] [--purge] (nuke)
