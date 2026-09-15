@@ -180,6 +180,155 @@ pick_multi() {
 	done
 }
 
+# Install picker. Candidate file: name<TAB>dir<TAB>new|override<TAB>occupant
+# Prints selected names. --yes / non-tty: uniques only (caller warns overrides).
+# TTY: checkbox when stty raw works; else numbered list. Empty keeps defaults
+# (uniques on, overrides off). 'all' / 'a' includes overrides.
+pick_install_skills() {
+	_prompt=$1
+	_file=$2
+	[ -s "$_file" ] || return 0
+	if [ "$YES" -eq 1 ] || ! [ -t 0 ] || ! [ -t 2 ]; then
+		while IFS="$TAB" read -r _n _d _kind _occ; do
+			[ "$_kind" = "new" ] && printf '%s\n' "$_n"
+		done <"$_file"
+		return 0
+	fi
+	if _pick_install_checkbox "$_prompt" "$_file"; then
+		return 0
+	fi
+	_pick_install_numbered "$_prompt" "$_file"
+}
+
+_pick_install_numbered() {
+	_prompt=$1
+	_file=$2
+	printf '%s\n' "${C_BOLD}${_prompt}${C_RESET}" >&2
+	_n=0
+	while IFS="$TAB" read -r _name _dir _kind _occ; do
+		_n=$((_n + 1))
+		if [ "$_kind" = "new" ]; then
+			_mark="${C_GREEN}[x]${C_RESET}"
+			_tag="new"
+		else
+			_mark="${C_DIM}[ ]${C_RESET}"
+			_tag="override  ${_occ}"
+		fi
+		printf '  %s%s%s) %s %s  %s%s%s\n' "$C_BOLD" "$_n" "$C_RESET" "$_mark" "$_name" "$C_DIM" "$_tag" "$C_RESET" >&2
+	done <"$_file"
+	printf '%s ' "  numbers to install (space-separated), ${C_BOLD}all${C_RESET}, or enter for defaults:" >&2
+	read -r _sel || _sel=""
+	if [ -z "$_sel" ]; then
+		while IFS="$TAB" read -r _name _dir _kind _occ; do
+			[ "$_kind" = "new" ] && printf '%s\n' "$_name"
+		done <"$_file"
+		return 0
+	fi
+	if [ "$_sel" = "all" ] || [ "$_sel" = "a" ]; then
+		while IFS="$TAB" read -r _name _dir _kind _occ; do
+			printf '%s\n' "$_name"
+		done <"$_file"
+		return 0
+	fi
+	for _num in $_sel; do
+		case $_num in
+			*[!0-9]*) continue ;;
+		esac
+		sed -n "${_num}p" "$_file" | {
+			IFS="$TAB" read -r _name _rest || true
+			[ -n "${_name:-}" ] && printf '%s\n' "$_name"
+		}
+	done
+}
+
+_pick_install_draw() {
+	printf '\n%s\n' "${C_BOLD}${PICK_PROMPT}${C_RESET}" >&2
+	ui_info "space toggle   arrows move   a all   enter confirm"
+	while IFS="$TAB" read -r _i _on _name _kind _occ; do
+		if [ "$_on" = 1 ]; then
+			_mark="${C_GREEN}[x]${C_RESET}"
+		else
+			_mark="${C_DIM}[ ]${C_RESET}"
+		fi
+		if [ "$_kind" = "new" ]; then
+			_tag="new"
+		else
+			_tag="override  ${_occ}"
+		fi
+		if [ "$_i" = "$PICK_CUR" ]; then
+			printf '  %s>%s %s %s  %s%s%s\n' "$C_CYAN" "$C_RESET" "$_mark" "$_name" "$C_DIM" "$_tag" "$C_RESET" >&2
+		else
+			printf '    %s %s  %s%s%s\n' "$_mark" "$_name" "$C_DIM" "$_tag" "$C_RESET" >&2
+		fi
+	done <"$PICK_STATE"
+}
+
+# Checkbox TUI (space toggle, arrows, a=all, enter). Returns 1 to fall back.
+_pick_install_checkbox() {
+	PICK_PROMPT=$1
+	_file=$2
+	[ "$FANCY" -eq 1 ] || return 1
+	command -v stty >/dev/null 2>&1 || return 1
+	_stty_save=$(stty -g 2>/dev/null) || return 1
+	stty -echo -icanon min 1 time 0 2>/dev/null || return 1
+	PICK_STATE=$(mktemp)
+	_i=0
+	while IFS="$TAB" read -r _name _dir _kind _occ; do
+		_i=$((_i + 1))
+		_on=0
+		[ "$_kind" = "new" ] && _on=1
+		printf '%s\t%s\t%s\t%s\t%s\n' "$_i" "$_on" "$_name" "$_kind" "$_occ" >>"$PICK_STATE"
+	done <"$_file"
+	_count=$_i
+	[ "$_count" -gt 0 ] || {
+		stty "$_stty_save" 2>/dev/null || true
+		rm -f "$PICK_STATE"
+		return 1
+	}
+	PICK_CUR=1
+	_nl=$(printf '\n')
+	_esc=$(printf '\033')
+	_pick_install_draw
+	while :; do
+		_c=$(dd bs=1 count=1 2>/dev/null) || _c=""
+		if [ -z "$_c" ]; then
+			stty "$_stty_save" 2>/dev/null || true
+			rm -f "$PICK_STATE"
+			return 1
+		fi
+		if [ "$_c" = " " ]; then
+			awk -F '\t' -v c="$PICK_CUR" 'BEGIN { OFS="\t" } { if ($1 == c) $2 = ($2 == 1) ? 0 : 1; print }' "$PICK_STATE" >"$PICK_STATE.tmp"
+			mv "$PICK_STATE.tmp" "$PICK_STATE"
+			printf '\033[%sA\033[J' "$((_count + 3))" >&2
+			_pick_install_draw
+		elif [ "$_c" = "a" ] || [ "$_c" = "A" ]; then
+			awk -F '\t' 'BEGIN { OFS="\t" } { $2 = 1; print }' "$PICK_STATE" >"$PICK_STATE.tmp"
+			mv "$PICK_STATE.tmp" "$PICK_STATE"
+			printf '\033[%sA\033[J' "$((_count + 3))" >&2
+			_pick_install_draw
+		elif [ "$_c" = "$_nl" ]; then
+			break
+		elif [ "$_c" = "$_esc" ]; then
+			_c2=$(dd bs=1 count=1 2>/dev/null) || true
+			_c3=$(dd bs=1 count=1 2>/dev/null) || true
+			if [ "$_c2" = "[" ]; then
+				case $_c3 in
+					A) [ "$PICK_CUR" -gt 1 ] && PICK_CUR=$((PICK_CUR - 1)) ;;
+					B) [ "$PICK_CUR" -lt "$_count" ] && PICK_CUR=$((PICK_CUR + 1)) ;;
+				esac
+				printf '\033[%sA\033[J' "$((_count + 3))" >&2
+				_pick_install_draw
+			fi
+		fi
+	done
+	stty "$_stty_save" 2>/dev/null || true
+	while IFS="$TAB" read -r _i _on _name _kind _occ; do
+		[ "$_on" = 1 ] && printf '%s\n' "$_name"
+	done <"$PICK_STATE"
+	rm -f "$PICK_STATE"
+	return 0
+}
+
 # Interactive y/N (unused by commands today; install.sh has its own).
 confirm() {
 	_msg=$1
@@ -413,7 +562,7 @@ source_heading() {
 	_src=$1
 	if is_git_url "$_src"; then
 		_u=$(normalize_git_url "$_src")
-		printf '%s' "$_u" | sed 's#^https\{0,1\}://##; s#^git@##; s#:#/#; s#\.git$##; s#^github\.com/##'
+		printf '%s' "$_u" | sed 's#^https\{0,1\}://##; s#^git@##; s#:#/#; s#\.git$##'
 	else
 		_p=$(expand_one_path "$_src")
 		_r=$(resolve_dir "$_p") || _r=$_p
@@ -421,39 +570,35 @@ source_heading() {
 	fi
 }
 
-# Index of source roots: resolved_root<TAB>layer<TAB>heading
+# Index of source roots: resolved_root<TAB>heading
 source_group_index() {
-	_local_res=$(resolve_dir "$LOCAL_SOURCE") || _local_res=$LOCAL_SOURCE
-	printf '%s\tlocal\tlocal\n' "$_local_res"
 	_itmp=$(mktemp)
 	manifest_entries >"$_itmp" || true
-	while IFS= read -r _line; do
-		[ -n "$_line" ] || continue
-		_layer=${_line%% *}
-		_src=${_line#* }
+	while IFS= read -r _src; do
+		[ -n "$_src" ] || continue
 		_root=$(source_clone_path "$_src")
 		_root_res=$(resolve_dir "$_root") || continue
 		_head=$(source_heading "$_src")
-		printf '%s\t%s\t%s\n' "$_root_res" "$_layer" "$_head"
+		printf '%s\t%s\n' "$_root_res" "$_head"
 	done <"$_itmp"
 	rm -f "$_itmp"
 }
 
-# Store entry -> layer<TAB>heading (longest matching source root).
+# Store entry -> heading (longest matching source root).
 skill_list_group() {
 	_e=$1
 	_idx=$2
 	if is_real_dir "$_e"; then
-		printf 'unmanaged\tunmanaged'
+		printf 'unmanaged'
 		return 0
 	fi
 	if is_symlink "$_e" && [ ! -e "$_e" ]; then
-		printf '?\t(broken)'
+		printf '(broken)'
 		return 0
 	fi
 	_t=$(resolve_dir "$_e") || _t=""
 	[ -n "$_t" ] || {
-		printf '?\t(broken)'
+		printf '(broken)'
 		return 0
 	}
 	_hit=$(awk -F '\t' -v t="$_t" '
@@ -462,17 +607,16 @@ skill_list_group() {
 			if (t == root || index(t, root "/") == 1) {
 				if (length(root) >= bestlen) {
 					bestlen = length(root)
-					layer = $2
-					heading = $3
+					heading = $2
 				}
 			}
 		}
 		END {
-			if (bestlen > 0) printf "%s\t%s", layer, heading
+			if (bestlen > 0) printf "%s", heading
 		}
 	' "$_idx")
 	if [ -z "$_hit" ]; then
-		printf 'user\t%s' "$(compact_home "$_t")"
+		compact_home "$_t"
 	else
 		printf '%s' "$_hit"
 	fi
@@ -542,16 +686,15 @@ manifest_entries() {
 }
 
 manifest_append() {
-	_layer=$1
-	_src=$2
-	if [ -f "$MANIFEST" ] && grep -qF "$_layer $_src" "$MANIFEST" 2>/dev/null; then
+	_src=$1
+	if [ -f "$MANIFEST" ] && grep -qxF "$_src" "$MANIFEST" 2>/dev/null; then
 		return 0
 	fi
 	if [ "$DRY_RUN" -eq 1 ]; then
-		ui_info "[dry-run] append to manifest: $_layer $_src"
+		ui_info "[dry-run] append to manifest: $_src"
 	else
 		mkdir -p "$CONFIG_DIR"
-		printf '%s %s\n' "$_layer" "$_src" >>"$MANIFEST"
+		printf '%s\n' "$_src" >>"$MANIFEST"
 	fi
 }
 
@@ -637,30 +780,17 @@ normalize_git_url() {
 }
 
 # Map a source URL/path to its on-disk location (clone under SOURCES_DIR, or local path).
+# Git clones keep the host: sources/github.com/owner/repo, sources/gitlab.com/…
 source_clone_path() {
 	_url=$1
-	case $_url in
-		http://* | https://*)
-			_p=$(printf '%s' "$_url" | sed 's#^https\{0,1\}://##; s#\.git$##; s#^github\.com/##')
-			path_has_dotdot_segment "$_p" && die "unsafe path in source URL: $_url"
-			printf '%s/%s' "$SOURCES_DIR" "$_p"
-			;;
-		git@*:*)
-			_p=$(printf '%s' "$_url" | sed 's#^git@##; s#:#/#; s#\.git$##')
-			path_has_dotdot_segment "$_p" && die "unsafe path in source URL: $_url"
-			printf '%s/%s' "$SOURCES_DIR" "$_p"
-			;;
-		/* | "~/"* | "~" | ./* | ../*)
-			expand_one_path "$_url"
-			;;
-		*/*)
-			path_has_dotdot_segment "$_url" && die "unsafe path in source: $_url"
-			printf '%s/%s' "$SOURCES_DIR" "$_url"
-			;;
-		*)
-			expand_one_path "$_url"
-			;;
-	esac
+	if is_git_url "$_url"; then
+		_u=$(normalize_git_url "$_url")
+		_p=$(printf '%s' "$_u" | sed 's#^https\{0,1\}://##; s#^ssh://git@##; s#^ssh://##; s#^git@##; s#:#/#; s#\.git$##')
+		path_has_dotdot_segment "$_p" && die "unsafe path in source URL: $_url"
+		printf '%s/%s' "$SOURCES_DIR" "$_p"
+		return 0
+	fi
+	expand_one_path "$_url"
 }
 
 # Fetch or update a git source; local paths are verified present only.
@@ -689,14 +819,16 @@ clone_or_pull_source() {
 
 # Point $STORE/$_name at $_src (symlink, or directory copy with --copy).
 # Never replaces an unmanaged real directory in the store.
+# Occupied names are left alone unless $_force=1 (explicit add override).
 link_skill() {
 	_name=$1
 	_src=$2
-	_layer=$3
+	_force=${3:-0}
 	if ! is_safe_skill_name "$_name"; then
 		ui_warn "'$_name': unsafe skill name, skipped"
 		return 0
 	fi
+	run mkdir -p "$STORE"
 	_dest="$STORE/$_name"
 
 	if is_excluded "$_name"; then
@@ -710,6 +842,10 @@ link_skill() {
 		if paths_equal "$_dest" "$_src"; then
 			return 0
 		fi
+		if [ "$_force" != 1 ]; then
+			ui_warn "'$_name': already installed, skipped"
+			return 0
+		fi
 		run rm -f "$_dest"
 	elif [ -e "$_dest" ]; then
 		ui_warn "'$_name': unexpected file in store, skipped"
@@ -717,55 +853,61 @@ link_skill() {
 	fi
 	if [ "$USE_COPY" -eq 1 ]; then
 		run cp -R "$_src" "$_dest"
-		ui_ok "$_name ${C_DIM}(copy, $_layer)${C_RESET}"
+		ui_ok "$_name ${C_DIM}(copy)${C_RESET}"
 	else
 		run ln -s "$(resolve_dir "$_src")" "$_dest"
-		ui_ok "$_name ${C_DIM}($_layer)${C_RESET}"
+		ui_ok "$_name"
 	fi
 }
 
-# Rebuild the store from all sources. Layers: org, then user, then local (last wins).
+store_name_occupied() {
+	_dest="$STORE/$1"
+	[ -L "$_dest" ] && [ -e "$_dest" ]
+}
+
+# Rebuild vacant store slots. Never steal an occupied name. If a vacant name
+# has two or more providers, leave it vacant and warn.
 materialize() {
 	run mkdir -p "$STORE"
-	_plan=$(mktemp)
+	_prov=$(mktemp)
+	_mtmp=$(mktemp)
+	manifest_entries >"$_mtmp" || true
+	while IFS= read -r _src; do
+		[ -n "$_src" ] || continue
+		_root=$(source_clone_path "$_src")
+		if [ ! -d "$_root" ]; then
+			ui_warn "source missing: $_src"
+			continue
+		fi
+		find_skills_in_source "$_root" | while IFS="$TAB" read -r _dir _name; do
+			printf '%s\t%s\t%s\n' "$_name" "$_dir" "$_src"
+		done
+	done <"$_mtmp" >"$_prov"
+	rm -f "$_mtmp"
 
-	for _want_layer in org user; do
-		manifest_entries | while IFS= read -r _line; do
-			_layer=${_line%% *}
-			_src=${_line#* }
-			[ "$_layer" = "$_want_layer" ] || continue
-			_root=$(source_clone_path "$_src")
-			if [ ! -d "$_root" ]; then
-				printf 'MISSING\t%s\t%s\n' "$_layer" "$_src"
-				continue
-			fi
-			find_skills_in_source "$_root" | while IFS="$TAB" read -r _dir _name; do
-				printf 'SKILL\t%s\t%s\t%s\n' "$_layer" "$_name" "$_dir"
-			done
-		done >>"$_plan"
-	done
-
-	if [ -d "$LOCAL_SOURCE" ]; then
-		find_skills_in_source "$LOCAL_SOURCE" | while IFS="$TAB" read -r _dir _name; do
-			printf 'SKILL\t%s\t%s\t%s\n' "local" "$_name" "$_dir"
-		done >>"$_plan"
-	fi
-
-	# Highest layer wins: keep only the last plan entry per skill name.
-	_final=$(mktemp)
-	awk -F '\t' '
-		$1 == "MISSING" { print; next }
-		$1 == "SKILL" { last[$3] = $0; if (!($3 in seen)) { seen[$3] = 1; order[++n] = $3 } }
-		END { for (i = 1; i <= n; i++) print last[order[i]] }
-	' "$_plan" >"$_final"
-
-	while IFS="$TAB" read -r _kind _layer _name _dir; do
-		case $_kind in
-			MISSING) ui_warn "source missing: $_name ($_layer)" ;;
-			SKILL) link_skill "$_name" "$_dir" "$_layer" ;;
-		esac
-	done <"$_final"
-	rm -f "$_plan" "$_final"
+	_names=$(mktemp)
+	awk -F '\t' '{ if (!seen[$1]++) print $1 }' "$_prov" >"$_names"
+	while IFS= read -r _name; do
+		[ -n "$_name" ] || continue
+		is_excluded "$_name" && continue
+		_dest="$STORE/$_name"
+		if is_real_dir "$_dest"; then
+			ui_warn "'$_name': unmanaged directory in store, skipped (move it into a source and 'add' it)"
+			continue
+		fi
+		if [ -L "$_dest" ] && [ -e "$_dest" ]; then
+			continue
+		fi
+		_nc=$(awk -F '\t' -v n="$_name" '$1 == n { c++ } END { print c+0 }' "$_prov")
+		if [ "$_nc" -gt 1 ]; then
+			ui_warn "'$_name': $_nc sources provide this name; not linking (add and pick an override)"
+			continue
+		fi
+		_dir=$(awk -F '\t' -v n="$_name" '$1 == n { print $2; exit }' "$_prov")
+		[ -n "$_dir" ] || continue
+		link_skill "$_name" "$_dir" 0
+	done <"$_names"
+	rm -f "$_prov" "$_names"
 
 	# Prune broken store links whose target is gone (source removed/updated).
 	if [ -d "$STORE" ]; then
@@ -936,23 +1078,19 @@ cmd_init() {
 	fi
 	rm -f "$_views" "$_cand"
 
+	if [ "$MIGRATED_ANY" -eq 1 ]; then
+		_local_res=$(resolve_dir "$LOCAL_SOURCE") || _local_res=$LOCAL_SOURCE
+		manifest_append "$_local_res"
+		ui_info "migrated skills now live in $_local_res (registered as a path source)"
+	fi
 	materialize
 	ui_end "init done ${C_DIM}($N_OK ok, $N_WARN warnings)${C_RESET}"
-	if [ "$MIGRATED_ANY" -eq 1 ]; then
-		ui_info "migrated skills now live in $LOCAL_SOURCE (yours to edit or move)"
-	fi
 }
 
 cmd_add() {
 	_source=""
-	_layer="user"
 	while [ $# -gt 0 ]; do
 		case $1 in
-			--layer)
-				shift
-				_layer=${1:-}
-				;;
-			--layer=*) _layer=${1#--layer=} ;;
 			-*) die "unknown option for add: $1" ;;
 			*)
 				[ -z "$_source" ] || die "unexpected argument: $1"
@@ -961,11 +1099,11 @@ cmd_add() {
 		esac
 		shift
 	done
-	[ -n "$_source" ] || die "usage: skillsync add <git-url|owner/repo|path> [--layer org|user]"
-	case $_layer in
-		org | user) ;;
-		*) die "layer must be org or user" ;;
-	esac
+	[ -n "$_source" ] || die "usage: skillsync add <git-url|owner/repo|path>"
+
+	if { ! [ -t 0 ] || ! [ -t 2 ]; } && [ "$YES" -ne 1 ]; then
+		die "non-interactive add requires --yes (skillsync --yes add <source>)"
+	fi
 
 	if is_git_url "$_source"; then
 		_entry=$(normalize_git_url "$_source")
@@ -975,18 +1113,51 @@ cmd_add() {
 		_entry=$(resolve_dir "$_entry")
 	fi
 
-	ui_header "skillsync add ${C_DIM}($_layer)${C_RESET} $_entry"
+	ui_header "skillsync add $_entry"
 	clone_or_pull_source "$_source" || die "could not fetch source"
-	manifest_append "$_layer" "$_entry"
+	manifest_append "$_entry"
 
-	# Re-adding a source un-excludes its skills.
 	_root=$(source_clone_path "$_entry")
+	_cand=$(mktemp)
+	_idx=$(mktemp)
+	source_group_index >"$_idx"
 	find_skills_in_source "$_root" | while IFS="$TAB" read -r _dir _name; do
-		if is_excluded "$_name"; then
-			exclude_del "$_name"
-			ui_info "un-excluded '$_name' (re-added)"
+		if store_name_occupied "$_name" && ! paths_equal "$STORE/$_name" "$_dir"; then
+			_occ=$(skill_list_group "$STORE/$_name" "$_idx")
+			printf '%s\t%s\toverride\t%s\n' "$_name" "$_dir" "$_occ"
+		else
+			printf '%s\t%s\tnew\t\n' "$_name" "$_dir"
 		fi
-	done
+	done >"$_cand"
+	rm -f "$_idx"
+
+	if [ ! -s "$_cand" ]; then
+		ui_info "no skills found in source"
+		rm -f "$_cand"
+		ui_end "add done ${C_DIM}($N_OK ok, $N_WARN warnings)${C_RESET}"
+		return 0
+	fi
+
+	if [ "$YES" -eq 1 ]; then
+		while IFS="$TAB" read -r _name _dir _kind _occ; do
+			[ "$_kind" = "override" ] && ui_warn "'$_name': already installed from ${_occ:-another source}, skipped"
+		done <"$_cand"
+	fi
+
+	_sel=$(pick_install_skills "install skills from this source?" "$_cand")
+	_sel_f=$(mktemp)
+	printf '%s\n' "$_sel" >"$_sel_f"
+
+	while IFS="$TAB" read -r _name _dir _kind _occ; do
+		if grep -qxF "$_name" "$_sel_f" 2>/dev/null; then
+			exclude_del "$_name"
+			link_skill "$_name" "$_dir" 1
+		elif [ "$_kind" = "new" ]; then
+			exclude_add "$_name"
+			ui_info "skipped '$_name' (excluded; sync will not install it)"
+		fi
+	done <"$_cand"
+	rm -f "$_cand" "$_sel_f"
 
 	materialize
 	ui_end "add done ${C_DIM}($N_OK ok, $N_WARN warnings)${C_RESET}"
@@ -996,8 +1167,8 @@ cmd_sync() {
 	ui_header "skillsync sync"
 	_mtmp=$(mktemp)
 	manifest_entries >"$_mtmp" || true
-	while IFS= read -r _line; do
-		_src=${_line#* }
+	while IFS= read -r _src; do
+		[ -n "$_src" ] || continue
 		if is_git_url "$_src"; then
 			clone_or_pull_source "$_src" || ui_warn "could not update source: $_src (continuing)"
 		fi
@@ -1041,7 +1212,7 @@ list_skills_pretty() {
 		return 0
 	fi
 	_sorted=$(mktemp)
-	sort -t "$TAB" -k3,3 -k1,1 "$_rows" >"$_sorted"
+	sort -t "$TAB" -k2,2 -k1,1 "$_rows" >"$_sorted"
 	rm -f "$_rows"
 	_w=$(awk -F '\t' '{
 		if (length($1) > m) m = length($1)
@@ -1054,14 +1225,12 @@ list_skills_pretty() {
 		-v b="${_lc_bold}" -v d="${_lc_dim}" -v r="${_lc_reset}" '
 		{
 			name = $1
-			layer = $2
-			heading = $3
-			blurb = $4
-			if (heading != prevh || layer != prevl) {
+			heading = $2
+			blurb = $3
+			if (heading != prevh) {
 				if (NR > 1) print ""
-				printf "%s%s%s  %s%s%s\n", b, heading, r, d, layer, r
+				printf "%s%s%s\n", b, heading, r
 				prevh = heading
-				prevl = layer
 			}
 			pad = w - length(name)
 			if (pad < 1) pad = 1
@@ -1173,11 +1342,11 @@ remove_source() {
 		_entry=$(expand_one_path "$_s")
 		_res=$(resolve_dir "$_entry") && _entry=$_res
 	fi
-	if [ -f "$MANIFEST" ] && grep -qF " $_entry" "$MANIFEST"; then
+	if [ -f "$MANIFEST" ] && grep -qxF "$_entry" "$MANIFEST"; then
 		if [ "$DRY_RUN" -eq 1 ]; then
 			ui_info "[dry-run] drop manifest entry: $_entry"
 		else
-			grep -vF " $_entry" "$MANIFEST" >"$MANIFEST.tmp" || true
+			grep -vxF "$_entry" "$MANIFEST" >"$MANIFEST.tmp" || true
 			mv "$MANIFEST.tmp" "$MANIFEST"
 		fi
 		ui_ok "unregistered $_entry"
@@ -1315,29 +1484,11 @@ cmd_doctor() {
 	rm -f "$_vtmp"
 
 	# Manifest sources present?
-	manifest_entries | while IFS= read -r _line; do
-		_src=${_line#* }
+	manifest_entries | while IFS= read -r _src; do
+		[ -n "$_src" ] || continue
 		_cp=$(source_clone_path "$_src")
 		[ -d "$_cp" ] || ui_warn "source missing on disk: $_src  (run sync or add)"
 	done
-
-	# Cross-layer collisions (informational; higher layer wins by design).
-	_ctmp=$(mktemp)
-	manifest_entries | while IFS= read -r _line; do
-		_layer=${_line%% *}
-		_src=${_line#* }
-		_root=$(source_clone_path "$_src")
-		[ -d "$_root" ] || continue
-		find_skills_in_source "$_root" | while IFS="$TAB" read -r _d _n; do
-			printf '%s\t%s\n' "$_n" "$_layer"
-		done
-	done | sort -u >"$_ctmp"
-	awk -F '\t' '{ c[$1]++ ; l[$1] = l[$1] " " $2 }
-		END { for (n in c) if (c[n] > 1) printf "%s:%s\n", n, l[n] }' "$_ctmp" |
-		while IFS= read -r _col; do
-			ui_info "collision: skill '${_col%%:*}' in layers${_col#*:} (highest wins)"
-		done
-	rm -f "$_ctmp"
 
 	if [ "$_issues" -gt 0 ]; then
 		ui_end "${C_RED}$_issues issue(s) found${C_RESET}"
@@ -1417,9 +1568,6 @@ _skillsync() {
 		remove | rm)
 			COMPREPLY=($(compgen -W "$(skillsync list --names 2>/dev/null) --source --all" -- "$cur"))
 			;;
-		add)
-			COMPREPLY=($(compgen -W "--layer" -- "$cur"))
-			;;
 		uninstall | nuke)
 			COMPREPLY=($(compgen -W "--keep --purge" -- "$cur"))
 			;;
@@ -1448,7 +1596,6 @@ _skillsync() {
 			skills=(${(f)"$(skillsync list --names 2>/dev/null)"})
 			_describe 'skill' skills
 			;;
-		add) _arguments '--layer[layer]:(org user)' ;;
 		uninstall | nuke) _arguments '--keep' '--purge' ;;
 		completion) _values 'shell' bash zsh ;;
 	esac
@@ -1472,8 +1619,8 @@ ${C_BOLD}Usage:${C_RESET}
 ${C_BOLD}Commands:${C_RESET}
   init                        Create store, migrate per-agent skills, link views
                               (non-interactive: skillsync --yes init)
-  add <url|path> [--layer org|user]
-                              Register a skill source (git repo or folder)
+  add <url|path>              Register a skill source; pick names to install
+                              (non-interactive: skillsync --yes add <source>)
   sync                        Pull all sources, refresh the store
   remove [names...] (rm)      Remove skills everywhere (picker when tty, no args)
   remove --all                Remove every installed skill
@@ -1490,7 +1637,7 @@ ${C_BOLD}Commands:${C_RESET}
 
 ${C_BOLD}Options:${C_RESET}  (global; before or after the command)
   --dry-run    Print actions without changing anything
-  --yes, -y    Skip prompts; init/remove select all in non-interactive use
+  --yes, -y    Skip prompts; non-interactive init/add/remove
   --copy       Copy instead of symlink (no-symlink filesystems)
 
 ${C_BOLD}Environment:${C_RESET}

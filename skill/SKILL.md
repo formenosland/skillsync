@@ -2,10 +2,10 @@
 name: skillsync
 description: >
   Unified AI agent skill installation. Use when bootstrapping a machine for
-  multi-agent skill setup, adding org or personal skill repos, removing
-  skills, syncing skill sources, uninstalling, diagnosing broken skill
-  symlinks, or interpreting skillsync doctor output. Triggers on "skillsync",
-  "unify skills", "sync agent skills", "remove a skill everywhere",
+  multi-agent skill setup, adding skill repos, removing skills, syncing skill
+  sources, uninstalling, diagnosing broken skill symlinks, or interpreting
+  skillsync doctor output. Triggers on "skillsync", "unify skills",
+  "sync agent skills", "remove a skill everywhere",
   "skills not showing up in Cursor/Claude/Codex", or agent skill path
   questions.
 ---
@@ -23,11 +23,10 @@ skill files — only links.
 ## When to use
 
 - **New machine** — install the CLI, then `init` once.
-- **Company skills** — `add` the org repo with `--layer org`.
-- **Personal skills** — `add` your repo or a local folder (default `user`).
-- **Skills stale** — `sync` pulls all git sources and refreshes links.
+- **Add a repo or folder** — `add` then pick names (TTY) or `--yes` for uniques.
+- **Skills stale** — `sync` pulls git sources and fills vacant names.
 - **Drop a skill everywhere** — `remove <name>` (or bare `remove` for a picker).
-- **Something broken** — `doctor` finds drifted views, broken links, collisions.
+- **Something broken** — `doctor` finds drifted views and broken links.
 - **Leaving** — `uninstall` (clean reverse of init), `--purge` to erase all data.
 
 ## Bootstrap
@@ -45,9 +44,9 @@ From a checkout: `./install.sh` then `skillsync init`.
 ```sh
 skillsync --yes init                 # non-interactive init (link all candidates)
 skillsync init                       # bootstrap: migrate + link agents (picker on tty)
-skillsync add acme-corp/skills --layer org
-skillsync add ~/dev/my-skills        # local folder as a source
-skillsync sync                       # pull sources, refresh store
+skillsync --yes add acme-corp/skills # unique names only; warn on collisions
+skillsync add ~/dev/my-skills        # local folder as a pointer
+skillsync sync                       # pull sources, fill vacant names
 skillsync remove terse               # gone from every agent, instantly
 skillsync remove                     # interactive picker (tty, no args)
 skillsync --yes remove --all         # remove every installed skill (scripts)
@@ -63,27 +62,30 @@ skillsync uninstall --purge          # type nuke to confirm; --yes skips prompts
 
 Global flags work before or after the subcommand: `skillsync --dry-run sync`,
 `skillsync init --yes`. Flags: `--dry-run` (preview), `--yes` / `-y` (no
-prompts), `--copy` (no-symlink filesystems). Without a TTY, bare `remove`
-needs skill names or `--all`. Layer precedence: `org` < `user` < `local`
-(highest wins on name collision). Store skill names follow the Agent Skills
-`name` rules: `^[a-z0-9]+(-[a-z0-9]+)*$`, max 64 chars.
+prompts), `--copy` (no-symlink filesystems). Without a TTY, `init`/`add` need
+`--yes`; bare `remove` needs skill names or `--all`. Occupied store names are
+not replaced unless the user checks override on `add`. Store skill names
+follow the Agent Skills `name` rules: `^[a-z0-9]+(-[a-z0-9]+)*$`, max 64 chars.
 
 ## Key semantics
 
 - `remove` deletes the store symlink and records the name in
   `~/.config/skillsync/exclude.conf` so `sync` won't restore it. Re-`add`
   the source (or edit that file) to bring it back. No backups needed —
-  source files are untouched.
+  source files are untouched. Unchecked unique names on `add` are excluded
+  the same way.
 - `init` migrates skills found in real agent folders into
-  `~/.local/share/skillsync/sources/local/` (still yours; edit or move
-  them), backs up what it replaces, and only links agents that are
+  `~/.local/share/skillsync/sources/local/` and registers that path in
+  `sources.conf`, backs up what it replaces, and only links agents that are
   actually installed.
+- Git clones live under `sources/<host>/<owner>/<repo>/`. Path sources are
+  not copied.
 - Real directories in the store are unmanaged: sync skips them, remove
   refuses them, doctor tells you to move them into a source and `add` it.
 
 ## Doctor output
 
-Exit code 1 only for **actionable** errors (broken links, drifted/wrong/not-linked views). Warnings (unmanaged dir, missing clone, collision info) do not fail the command.
+Exit code 1 only for **actionable** errors (broken links, drifted/wrong/not-linked views). Warnings (unmanaged dir, missing clone) do not fail the command.
 
 | Finding | Meaning | Fix |
 |---------|---------|-----|
@@ -92,7 +94,6 @@ Exit code 1 only for **actionable** errors (broken links, drifted/wrong/not-link
 | wrong link | View points somewhere else | `init` |
 | not linked | Installed agent without a view | `init` |
 | unmanaged dir in store | Files placed in store by hand | Move to a source, `add` |
-| collision (info) | Same name in two layers | Expected; highest layer wins |
 
 ## Cautions
 

@@ -2,7 +2,7 @@
 
 **Status:** Stable (v0.3 series) · **Maintainer:** formenos.land
 
-skillsync defines a vendor-neutral convention for installing and managing AI agent skills across tools, scopes, and organizational boundaries: a canonical skill store with per-agent directory views and layered source manifests. This document is the reference for the design; the [README](../README.md) covers day-to-day usage.
+skillsync defines a vendor-neutral convention for installing and managing AI agent skills across tools: a canonical skill store with per-agent directory views. This document is the reference for the design; the [README](../README.md) covers day-to-day usage.
 
 ## 1. Problem
 
@@ -18,7 +18,7 @@ Adoption is broad (70+ tools), but installation is fragmented:
 | **Agent** | Each tool expects skills in its own folder |
 | **Tooling** | Per-agent CLIs, manual copying, ad-hoc scripts |
 
-A developer using Claude Code, Cursor, Codex, and Copilot may maintain four copies of the same skill in four global directories, plus project copies. Company-wide skills require yet another distribution mechanism.
+A developer using Claude Code, Cursor, Codex, and Copilot may maintain four copies of the same skill in four global directories, plus project copies.
 
 ### 1.2 What already works
 
@@ -26,7 +26,7 @@ A developer using Claude Code, Cursor, Codex, and Copilot may maintain four copi
 - **The SKILL.md format** is standardized and interoperable.
 - **The vercel-labs `skills` CLI** (`npx skills add …`) fetches skills into chosen agent (and project) directories — useful distribution, a different layout model.
 
-What's missing is a **unified global layer** with org/user precedence and a single write path (one store, many views).
+What's missing is a **single write path** (one store, many views).
 
 ## 2. Prior Art
 
@@ -45,29 +45,22 @@ skillsync applies the Stow pattern: one canonical store, many symlinks.
 ### 3.1 Core model
 
 ```
-   sources (humans own these)              store (skillsync owns this)         views (vendor folders)
+   sources (humans own these)              store (installed names)             views (vendor folders)
 ┌────────────────────────────┐      ┌───────────────────────────────┐    ┌──────────────────────────┐
-│ git: acme-corp/skills (org)│      │ ~/.local/share/skillsync/store│    │ ~/.agents/skills      ───┼──┐
-│ git: alice/skills   (user) │ ───> │   skill-a -> sources/…        │<───┼ ~/.claude/skills         │  │
-│ dir: ~/dev/my-skills (user)│      │   skill-b -> sources/…        │    │ ~/.codex/skills          │  │ every view is a
-│ sources/local  (migrated)  │      │   skill-c -> ~/dev/my-skills/…│    │ ~/.gemini/skills         │  │ symlink to the
+│ git clones (host/owner/repo)│      │ ~/.local/share/skillsync/store│    │ ~/.agents/skills      ───┼──┐
+│ dir: ~/dev/my-skills        │ ───> │   skill-a -> sources/…        │<───┼ ~/.claude/skills         │  │
+│ sources/local (init dump)   │      │   skill-b -> ~/dev/my-skills/…│    │ ~/.codex/skills          │  │ every view is a
 └────────────────────────────┘      └───────────────────────────────┘    │ … (~75 agents)        ───┼──┘ store
                                                                          └──────────────────────────┘
 ```
 
-**Store** — a single canonical directory of per-skill symlinks. Not a vendor path: it lives in skillsync's own XDG data directory, so no vendor semantics can ever collide with it.
+**Store** — a single canonical directory of per-skill symlinks (the installed name index). Not a vendor path: it lives in skillsync's own XDG data directory, so no vendor semantics can ever collide with it. Agent views are a whole-directory symlink to this folder.
 
 **Views** — every agent's global skills directory (including `~/.agents/skills`, which some vendors read natively) is a whole-directory symlink to the store. Adding a skill once makes it visible to every agent. No per-agent bookkeeping.
 
 **Ownership invariant** — *skillsync owns the store; humans own sources.* The store contains only symlinks created by skillsync. A real directory found in the store is unmanaged: `sync` skips it, `remove` refuses it, `doctor` flags it with advice to move it into a source. skillsync never deletes skill files — only links.
 
-**Layers** — sources merge with precedence:
-
-```
-org  <  user  <  local (sources/local/, migrated or hand-placed)
-```
-
-Highest layer wins on name collision. Project skills (`.agents/skills/` in a repo) are outside home-scope sync; agents resolve them nearest-first themselves.
+**Occupancy** — a store name is occupied or vacant. `add` does not replace an occupant unless the user checks that row (override). `--yes add` installs unique names only and warns. `sync` never steals an occupied name. A vacant name with two or more providers is left unlinked (warn). Project skills (`.agents/skills/` in a repo) are outside home-scope sync; agents resolve them nearest-first themselves.
 
 ### 3.2 Locations (XDG)
 
@@ -81,18 +74,17 @@ No new dotfolder in `~`. This matches the practice of OpenCode, Amp, Goose, and 
 
 ### 3.3 Sources manifest
 
-File: `~/.config/skillsync/sources.conf` — POSIX-sh-parseable, one source per line:
+File: `~/.config/skillsync/sources.conf` — one source per line:
 
 ```
-# layer  url-or-path
-org      https://github.com/acme-corp/skills
-user     https://github.com/alice/personal-skills
-user     /home/alice/dev/experimental-skills
+# skill sources
+https://github.com/alice/personal-skills
+/home/alice/dev/experimental-skills
 ```
 
-- `#` comments; first token is the layer (`org` or `user`), remainder is the URL or absolute path.
-- Git sources are cloned to `~/.local/share/skillsync/sources/<owner>/<repo>/` (paths derived from the URL must stay under `sources/`; `..` segments are rejected). Local paths are referenced in place.
-- `sources/local/` is an implicit final source (highest precedence): `init` migrates skills found in existing agent folders here, and users may place authored skills here directly.
+- `#` comments; remainder of a non-empty line is a git URL or absolute path.
+- Git sources are cloned to `~/.local/share/skillsync/sources/<host>/<owner>/<repo>/` (scheme and trailing `.git` stripped; `..` segments rejected). `owner/repo` shorthand is GitHub HTTPS. Local paths are referenced in place (no copy).
+- `init` may evacuate real agent-folder skills into `sources/local/` and **register that path in the manifest** like any other path source. It is not an implicit extra source.
 
 ### 3.4 Skill discovery
 
@@ -114,9 +106,11 @@ Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud l
 
 | Situation | Resolution |
 |-----------|------------|
-| Same name, org vs user layer | User wins |
-| Same name, any source vs `sources/local/` | Local wins |
-| Same name from two same-layer sources | Later manifest entry wins |
+| `add` unique name | Linked after picker / `--yes` |
+| `add` name already in store | Unchecked by default (`override`); `--yes` skips and warns |
+| `sync`, vacant, one provider | Link |
+| `sync`, vacant, two+ providers | Leave vacant; warn |
+| Occupied store name | Never retargeted by `sync` |
 | Unmanaged real directory in store | Never touched; flagged by doctor |
 | Project skill vs global skill | Agent resolves nearest scope itself |
 
@@ -124,15 +118,15 @@ Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud l
 
 | Command | Semantics |
 |---------|-----------|
-| `init` | Create store; for each installed agent: migrate real skills to `sources/local/`, back up the folder, replace it with a view symlink. Idempotent. Interactive agent selection on a tty; non-interactive init requires global `--yes` (`skillsync --yes init`, which selects all link candidates). |
-| `add` | Register a source (git URL, `owner/repo`, or path), fetch it, materialize. Re-adding un-excludes its skills. |
-| `sync` | Pull all git sources, re-materialize with layer precedence, prune broken links. |
+| `init` | Create store; for each installed agent: migrate real skills to `sources/local/`, register that path, back up the folder, replace it with a view symlink. Idempotent. Interactive agent selection on a tty; non-interactive init requires global `--yes`. |
+| `add` | Register a source, fetch it, pick names to symlink. TTY checkbox (overrides explicit). `--yes` installs unique names only. Unchecked unique names go to `exclude.conf`. Non-TTY without `--yes` refuses. |
+| `sync` | Pull all git sources, fill vacant names, prune broken links. Never steal occupied names. |
 | `remove` | Delete the skill's store symlink (visible everywhere instantly) and record the name in `exclude.conf` so sync won't restore it. No backups — source files are never touched, so nothing is lost. Refuses unmanaged entries. Bare `remove` on a tty opens a picker; without names, non-interactive use requires skill arguments or `--all` (`skillsync --yes remove --all` removes everything). |
 | `remove --all` | Remove every skill currently in the store (same per-skill semantics as `remove <name>`). |
 | `remove --source` | Drop the manifest entry, delete the clone (managed clones only — local folders are kept), remove its store links, re-materialize. |
 | `list` | On a tty: skills grouped by source, with the first line of each `description`. Piped / `--names` (`-1`): plain names for scripts and completion. `--pretty` forces the catalog. |
 | `status` | Skills with origins, agent view states, sources, excludes. |
-| `doctor` | Broken links, drifted views (agent recreated a real folder), wrong links, missing sources, unlinked installed agents, cross-layer collisions (informational). Exit 1 on actionable findings. |
+| `doctor` | Broken links, drifted views (agent recreated a real folder), wrong links, missing sources, unlinked installed agents. Exit 1 on actionable findings. |
 | `uninstall` | Reverse of init: remove all view symlinks (default), or convert views to real copies (`--keep`). `--purge` deletes all skillsync data after typing the confirmation word `nuke`; global `--yes` skips that prompt. |
 
 **Global options** (before or after the subcommand): `--dry-run`, `--yes` / `-y`, `--copy`. Examples: `skillsync --dry-run remove foo`, `skillsync remove foo --dry-run`, `skillsync init --yes`.
@@ -147,7 +141,7 @@ All commands honor `--dry-run`; prompts (including typed purge confirm) honor `-
 
 ## 5. Migration Path
 
-- **From per-agent installs:** `skillsync init` — skills found in agent folders move to `sources/local/`, folders become views, originals backed up.
+- **From per-agent installs:** `skillsync init` — skills found in agent folders move to `sources/local/` (then listed in `sources.conf`), folders become views, originals backed up.
 - **From the vercel `skills` CLI:** no conflict; it installs into agent dirs, which are views into the store after init. Skills added by either tool appear everywhere.
 - **From manual copies:** put them in a folder, `skillsync add <folder>`.
 

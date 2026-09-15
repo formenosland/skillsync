@@ -82,6 +82,10 @@ check "shellcheck clean" shellcheck "$SKILLSYNC" "$ROOT/install.sh" "$ROOT/regis
 # silently select nothing (init: "skipped by selection" with no picker).
 check "pick_multi is not on the right of a pipe" \
 	sh -c "! grep -qE '\\|[[:space:]]*pick_multi' '$SKILLSYNC'"
+check "pick_install_skills is not on the right of a pipe" \
+	sh -c "! grep -qE '\\|[[:space:]]*pick_install_skills' '$SKILLSYNC'"
+check "clone path keeps git host" \
+	sh -c "! grep -Fq 's#^github.com/' '$SKILLSYNC' && ! grep -Fq 's#^github\\\\.com/' '$SKILLSYNC'"
 check "registry has data rows" sh -c "grep -cv '^#\\|^agent_id' '$ROOT/registry/agents.tsv' | grep -q '[0-9]'"
 _ver=$(sed -n 's/^VERSION="\([^"]*\)"$/\1/p' "$SKILLSYNC" | head -n 1)
 [ -n "$_ver" ] || fail "VERSION= not found in bin/skillsync"
@@ -102,24 +106,35 @@ check "codex view linked" test -L "$HOME_DIR/.codex/skills"
 check "uninstalled agent untouched" test ! -e "$HOME_DIR/.nope"
 check "migrated skill in sources/local" test -f "$T/sync/sources/local/oldskill/SKILL.md"
 check "migrated skill linked in store" test -L "$T/sync/store/oldskill"
+check "init registered local path source" grep -q sources/local "$T/sync/sources.conf"
 check "skill visible through view" test -f "$HOME_DIR/.claude/skills/oldskill/SKILL.md"
 
 OUT=$(s init 2>&1)
 check "second init reports already linked" out_has 'already linked'
 check "init uses quiet catalog chrome" out_lacks '◆|└'
 
-# --- 2. add, layers, precedence, idempotent sync -------------------------------
+# --- 2. add, occupancy, idempotent sync ---------------------------------------
 
-say "== add / layers"
+say "== add / occupancy"
 make_skill "$T/src-org/skills/alpha" alpha
 make_skill "$T/src-org/skills/beta" beta
 make_skill "$T/src-user/beta" beta
+make_skill "$T/src-user/gamma" gamma
 
-s add "$T/src-org" --layer org >/dev/null 2>&1
+s add "$T/src-org" >/dev/null 2>&1
 s add "$T/src-user" >/dev/null 2>&1
-check "org skill linked" test -L "$T/sync/store/alpha"
+check "unique skill linked" test -L "$T/sync/store/alpha"
+check "unique skill from second source linked" test -L "$T/sync/store/gamma"
 OUT=$(readlink "$T/sync/store/beta")
-check "user beta wins over org" out_has src-user
+check "occupied beta is not replaced" out_has src-org
+check "path add does not copy into sources" test ! -e "$T/sync/sources/src-org"
+check "path add is a pointer" sh -c 'readlink "$1" | grep -q src-org' sh "$T/sync/store/alpha"
+
+OUT=$(s add "$T/src-user" 2>&1)
+check "--yes add warns on name conflict" out_has 'already installed'
+OUT=$("$SKILLSYNC" add "$T/src-user" </dev/null 2>&1) && _rc=0 || _rc=$?
+check "non-interactive add without --yes exits nonzero" test "$_rc" -ne 0
+check "non-interactive add requires --yes message" out_has 'non-interactive add requires --yes'
 
 OUT=$(s sync 2>&1)
 check "sync is idempotent (no relinks)" out_lacks 'linking|updating'
@@ -137,8 +152,8 @@ check "pretty groups org path" out_has src-org
 check "pretty groups user path" out_has src-user
 check "pretty shows local group" out_has local
 check "pretty shows description" out_has 'test skill alpha'
-check "pretty shows layer org" out_has '  org'
 check "pretty catalog has no tree chrome" out_lacks 'skill(s)|skillsync list'
+check "pretty has no layer labels" out_lacks '  org$|  user$'
 
 OUT=$(s list --names)
 check "list --names is still a name" out_has alpha
@@ -321,7 +336,7 @@ check "global --dry-run after command is honored" test -L "$T/sync/store/postfla
 "$SKILLSYNC" remove postflag --yes >/dev/null 2>&1
 check "global --yes after command is honored" test ! -e "$T/sync/store/postflag"
 
-OUT=$("$SKILLSYNC" add 'https://github.com/foo/../../../tmp-evil' 2>&1) && _rc=0 || _rc=$?
+OUT=$("$SKILLSYNC" --yes add 'https://github.com/foo/../../../tmp-evil' 2>&1) && _rc=0 || _rc=$?
 check "unsafe source URL path exits nonzero" test "$_rc" -ne 0
 check "unsafe source URL path error" out_has 'unsafe path'
 
@@ -339,8 +354,6 @@ check "init with --yes links agent view" test -L "$HOME_DIR/.claude/skills"
 drop_sandbox
 
 # --- 11. installer ---------------------------------------------------------------------
-
-say "== installer"
 _got=$(printf '%s' '{"url":"x","tag_name":"v3.1.4","name":"n"}' | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
 check "release json tag_name parse" test "$_got" = "v3.1.4"
 T=$(mktemp -d)
