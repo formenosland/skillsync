@@ -33,11 +33,11 @@ skill files — only links.
 
 ```sh
 brew install formenosland/tap/skillsync
-# or: curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
+# or: go install github.com/formenosland/skillsync/cmd/skillsync@latest
 skillsync init
 ```
 
-From a checkout: `./install.sh` then `skillsync init`.
+From a checkout: `make` then run `./bin/skillsync init` (or `make install` onto `GOBIN`).
 
 ## Commands
 
@@ -53,7 +53,7 @@ skillsync --yes remove --all         # remove every installed skill (scripts)
 skillsync remove --source ~/dev/my-skills
 skillsync list                       # catalog on a tty; names when piped
 skillsync list --names               # always one name per line (completion)
-skillsync status                     # skills, origins, view states
+skillsync status                     # dashboard: paths, source health, views
 skillsync doctor                     # exit 1 on actionable findings only
 skillsync uninstall                  # remove views; store/config kept
 skillsync uninstall --keep           # views become real copies instead
@@ -70,13 +70,13 @@ follow the Agent Skills `name` rules: `^[a-z0-9]+(-[a-z0-9]+)*$`, max 64 chars.
 ## Key semantics
 
 - `remove` deletes the store symlink and records the name in
-  `~/.config/skillsync/exclude.conf` so `sync` won't restore it. Re-`add`
+  `skillsyncrc` (`excludes`) so `sync` won't restore it. Re-`add`
   the source (or edit that file) to bring it back. No backups needed —
   source files are untouched. Unchecked unique names on `add` are excluded
   the same way.
 - `init` migrates skills found in real agent folders into
   `~/.local/share/skillsync/sources/local/` and registers that path in
-  `sources.conf`, backs up what it replaces, and only links agents that are
+  `skillsyncrc`, backs up what it replaces, and only links agents that are
   actually installed.
 - Git clones live under `sources/<host>/<owner>/<repo>/`. Path sources are
   not copied.
@@ -97,17 +97,15 @@ Exit code 1 only for **actionable** errors (broken links, drifted/wrong/not-link
 
 ## Cautions
 
-- **Two uninstalls:** `install.sh --uninstall` (or `curl ... | sh -s -- --uninstall`)
-  removes only the curl-installed binary and app under
-  `~/.local/share/skillsync/app/`. `brew uninstall skillsync` removes the
-  Homebrew keg. Neither touches skill data. `skillsync uninstall` removes
-  agent view symlinks; `--purge` also deletes store, sources, and config.
+- **Two uninstalls:** `brew uninstall skillsync` (or delete a `go install`
+  binary) removes the tool only. `skillsync uninstall` removes agent view
+  symlinks; `--purge` also deletes store, sources, and config.
 - `uninstall --purge` deletes the store, cloned sources (including
   migrated `sources/local/`), config, and backups. Confirm by typing
   `nuke`; `skillsync --yes uninstall --purge` skips that prompt. Everything
   else is non-destructive to skill files.
-- Registry gaps: add rows to `~/.config/skillsync/agents.local.tsv`
-  (format: `agent_id<TAB>display_name<TAB>global_path<TAB>project_path`).
+- Registry gaps: add `[[agents]]` tables to `skillsyncrc`
+  (`id`, `display_name`, `global_path`, `project_path`).
 - Project scope (`.agents/skills/` in a repo) is the repo's business,
   not skillsync's.
 
@@ -120,6 +118,6 @@ NO_COLOR=1                    # plain output
 ```
 
 Shell completion: `eval "$(skillsync completion bash)"` (or `zsh`).
-Full design: `docs/DESIGN.md`. Registry: `registry/agents.tsv`
-(generated file; do not hand-edit). Local path overrides:
-`agents.local.tsv`.
+Full design: `docs/DESIGN.md`. Agent registry: `internal/agentregistry/agents.tsv`
+(generated file; do not hand-edit). Local path overrides: `[[agents]]`
+in `skillsyncrc`.

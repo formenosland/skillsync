@@ -14,4 +14,4 @@ Include a description of the issue, steps to reproduce, and impact if known. We 
 
 ## Scope notes
 
-skillsync clones and reads **user-configured skill sources** (git repositories and local paths declared in your manifest). Treat source URLs and paths as untrusted input in automation. The tool only creates and removes **symlinks** in its store and agent view directories; it does not delete skill files in source trees.
+skillsync clones and reads **user-configured skill sources** (git repositories and local paths declared in `skillsyncrc`). Treat source URLs and paths as untrusted input in automation. The tool only creates and removes **symlinks** in its store and agent view directories; it does not delete skill files in source trees.

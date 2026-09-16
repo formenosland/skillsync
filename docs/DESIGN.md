@@ -66,25 +66,27 @@ skillsync applies the Stow pattern: one canonical store, many symlinks.
 
 | What | Path |
 |------|------|
-| Manifest, excludes, registry override | `${XDG_CONFIG_HOME:-~/.config}/skillsync/` |
+| Config (`skillsyncrc`) | `${XDG_CONFIG_HOME:-~/.config}/skillsyncrc` |
 | Store, cloned sources, backups | `${XDG_DATA_HOME:-~/.local/share}/skillsync/` |
-| Single-root override | `SKILLSYNC_HOME` env var |
+| Single-root override | `SKILLSYNC_HOME` env var (`$SKILLSYNC_HOME/skillsyncrc`) |
 
 No new dotfolder in `~`. This matches the practice of OpenCode, Amp, Goose, and the vercel CLI on both Linux and macOS.
 
-### 3.3 Sources manifest
+### 3.3 Sources file
 
-File: `~/.config/skillsync/sources.conf` — one source per line:
+File: `${XDG_CONFIG_HOME:-~/.config}/skillsyncrc` — TOML:
 
+```toml
+sources = [
+  "https://github.com/alice/personal-skills",
+  "/home/alice/dev/experimental-skills",
+]
+excludes = ["old-skill"]
 ```
-# skill sources
-https://github.com/alice/personal-skills
-/home/alice/dev/experimental-skills
-```
 
-- `#` comments; remainder of a non-empty line is a git URL or absolute path.
+- `#` comments in TOML; `sources` is a list of git URLs or absolute paths.
 - Git sources are cloned to `~/.local/share/skillsync/sources/<host>/<owner>/<repo>/` (scheme and trailing `.git` stripped; `..` segments rejected). `owner/repo` shorthand is GitHub HTTPS. Local paths are referenced in place (no copy).
-- `init` may evacuate real agent-folder skills into `sources/local/` and **register that path in the manifest** like any other path source. It is not an implicit extra source.
+- `init` may evacuate real agent-folder skills into `sources/local/` and **register that path in `skillsyncrc`** like any other path source. It is not an implicit extra source.
 
 ### 3.4 Skill discovery
 
@@ -92,12 +94,12 @@ Within each source, skill directories (containing `SKILL.md`) are found at depth
 
 ### 3.5 Agent registry
 
-`registry/agents.tsv` maps agent ids to global and project paths. Requirements:
+`internal/agentregistry/agents.tsv` maps agent ids to global and project paths. Requirements:
 
-- **Generated, not hand-written.** The committed TSV is produced by `registry/generate.sh`. That script can refresh rows from vercel-labs/skills `src/agents.ts` (pinned SHA in the file header) so path coverage stays aligned with that CLI; runtime still needs no network. This is a maintenance convenience, not the origin of the store/view model.
+- **Generated, not hand-written.** The committed TSV is produced by `go run ./internal/agentregistry/gen` (`make agentregistry`). That command refreshes rows from vercel-labs/skills `src/agents.ts` (pinned SHA in the file header) so path coverage stays aligned with that CLI; runtime still needs no network. This is a maintenance convenience, not the origin of the store/view model.
 - **Expressive paths.** Rows may use `~`, `${VAR:-default}` (env-overridable homes such as `CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`), and `|`-separated alternates (first whose parent directory exists wins — e.g. OpenClaw's `~/.openclaw` → `~/.clawdbot` → `~/.moltbot`).
 - **Project-only agents** carry `-` as global path and get no view.
-- **Local override:** `~/.config/skillsync/agents.local.tsv` (same format) merges over the shipped registry, winning by `agent_id`. Users can add unlisted agents or correct paths without touching the installation.
+- **Local override:** `[[agents]]` in `skillsyncrc` (fields `id`, `display_name`, `global_path`, `project_path`) merges over the shipped registry, winning by `id`. Users can add unlisted agents or correct paths without touching the installation.
 - **Install detection:** a view is only created when the agent's parent folder exists, so uninstalled agents never cause folder litter.
 
 Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud library) are documented as out of scope.
@@ -119,13 +121,13 @@ Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud l
 | Command | Semantics |
 |---------|-----------|
 | `init` | Create store; for each installed agent: migrate real skills to `sources/local/`, register that path, back up the folder, replace it with a view symlink. Idempotent. Interactive agent selection on a tty; non-interactive init requires global `--yes`. |
-| `add` | Register a source, fetch it, pick names to symlink. TTY checkbox (overrides explicit). `--yes` installs unique names only. Unchecked unique names go to `exclude.conf`. Non-TTY without `--yes` refuses. |
+| `add` | Register a source, fetch it, pick names to symlink. TTY checkbox (overrides explicit). `--yes` installs unique names only. Unchecked unique names go to `excludes` in `skillsyncrc`. Non-TTY without `--yes` refuses. |
 | `sync` | Pull all git sources, fill vacant names, prune broken links. Never steal occupied names. |
-| `remove` | Delete the skill's store symlink (visible everywhere instantly) and record the name in `exclude.conf` so sync won't restore it. No backups — source files are never touched, so nothing is lost. Refuses unmanaged entries. Bare `remove` on a tty opens a picker; without names, non-interactive use requires skill arguments or `--all` (`skillsync --yes remove --all` removes everything). |
+| `remove` | Delete the skill's store symlink (visible everywhere instantly) and record the name in `excludes` so sync won't restore it. No backups — source files are never touched, so nothing is lost. Refuses unmanaged entries. Bare `remove` on a tty opens a picker; without names, non-interactive use requires skill arguments or `--all` (`skillsync --yes remove --all` removes everything). |
 | `remove --all` | Remove every skill currently in the store (same per-skill semantics as `remove <name>`). |
 | `remove --source` | Drop the manifest entry, delete the clone (managed clones only — local folders are kept), remove its store links, re-materialize. |
-| `list` | On a tty: skills grouped by source, with the first line of each `description`. Piped / `--names` (`-1`): plain names for scripts and completion. `--pretty` forces the catalog. |
-| `status` | Skills with origins, agent view states, sources, excludes. |
+| `list` | On a tty: skills grouped by source, with the first line of each `description`. Piped / `--names` (`-1`): plain names for scripts and completion. `--pretty` forces the catalog when stdout is not a tty. |
+| `status` | Dashboard: version, store/config paths, skill and source counts, source health vs last fetched origin (`up to date` / `behind` / `ahead` / `diverged` / `local` / `missing`; path sources: `path`). No network. Not a skill catalog (`list` is). |
 | `doctor` | Broken links, drifted views (agent recreated a real folder), wrong links, missing sources, unlinked installed agents. Exit 1 on actionable findings. |
 | `uninstall` | Reverse of init: remove all view symlinks (default), or convert views to real copies (`--keep`). `--purge` deletes all skillsync data after typing the confirmation word `nuke`; global `--yes` skips that prompt. |
 
@@ -141,7 +143,7 @@ All commands honor `--dry-run`; prompts (including typed purge confirm) honor `-
 
 ## 5. Migration Path
 
-- **From per-agent installs:** `skillsync init` — skills found in agent folders move to `sources/local/` (then listed in `sources.conf`), folders become views, originals backed up.
+- **From per-agent installs:** `skillsync init` — skills found in agent folders move to `sources/local/` (then listed in `skillsyncrc`), folders become views, originals backed up.
 - **From the vercel `skills` CLI:** no conflict; it installs into agent dirs, which are views into the store after init. Skills added by either tool appear everywhere.
 - **From manual copies:** put them in a folder, `skillsync add <folder>`.
 
@@ -151,24 +153,23 @@ The reference CLI is installed out-of-band from skill data:
 
 | Piece | Location |
 |-------|----------|
-| Application (curl install) | `${XDG_DATA_HOME:-~/.local/share}/skillsync/app/` |
-| User command (curl) | `~/.local/bin/skillsync` → `app/bin/skillsync` |
 | Application (Homebrew) | keg under the Homebrew prefix (`libexec` + `bin/skillsync` symlink) |
-| Skill config / data | `${XDG_CONFIG_HOME:-~/.config}/skillsync/` and `${XDG_DATA_HOME:-~/.local/share}/skillsync/` (store, sources, backups) |
+| Application (`go install`) | `$(go env GOPATH)/bin/skillsync` (or `$GOBIN`) |
+| Application (checkout) | `./bin/skillsync` after `make` |
+| Skill config / data | `${XDG_CONFIG_HOME:-~/.config}/skillsyncrc` and `${XDG_DATA_HOME:-~/.local/share}/skillsync/` (store, sources, backups) |
 
-Install/update is either Homebrew or a pipe-safe `install.sh`. Homebrew is the formula in [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap) (`brew install formenosland/tap/skillsync`); it uses GitHub’s tagged source archive, not a custom binary. The skillsync Release workflow hashes that archive and calls the tap’s reusable `bump.yml` so `url` / `sha256` stay in lockstep with the tag. Curl:
+Install/update is Homebrew, `go install`, or building from a checkout. Homebrew is the formula in [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap) (`brew install formenosland/tap/skillsync`); it uses GitHub’s tagged source archive, not a custom binary. The skillsync Release workflow hashes that archive and calls the tap’s reusable `bump.yml` so `url` / `sha256` stay in lockstep with the tag.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
+brew install formenosland/tap/skillsync
+go install github.com/formenosland/skillsync/cmd/skillsync@latest
 ```
 
-Default git install is the latest GitHub Release tag. `SKILLSYNC_INSTALL_REF` overrides (tag, branch, or commit). A checkout of this repo copies the local tree and does not hit the network.
-
-For formenos.land tools the planned stable URL is `https://get.formenos.land/<tool>/install.sh` (e.g. `/skillsync/install.sh`), backed by a small GitHub Pages repo with one static script per tool, synced from each tool repo on release (a Cloudflare redirect to the repository raw URL is an acceptable alternative). Re-running the installer updates the app copy; it does not run `skillsync init` or touch views. Removing the tool (`install.sh --uninstall` or `brew uninstall skillsync`) deletes only that install method’s files; `skillsync uninstall [--purge]` manages views and skill data.
+Removing the tool (`brew uninstall skillsync`, or deleting the `go install` binary) does not touch skill data. `skillsync uninstall [--purge]` manages views and skill data. An older curl installer used `${XDG_DATA_HOME}/skillsync/app/` and `~/.local/bin/skillsync`; that path is obsolete.
 
 ## 7. Pinning and Updates
 
-- Git sources: `sync` runs `git pull --ff-only`. Pin by checking out a tag/commit in the clone; skillsync does not rewrite HEADs.
+- Git sources: `sync` fetches and updates clones (HTTPS via go-git). Pin by checking out a tag/commit in the clone; skillsync does not rewrite HEADs.
 - Local paths: always live.
 - Registry: pinned upstream commit, explicit regeneration.
 - Future: optional `sources.lock` with commit SHAs (out of scope for v0).
@@ -179,7 +180,7 @@ For formenos.land tools the planned stable URL is `https://get.formenos.land/<to
 
 **Long term** — vendors should converge on *one shared global path* (the ecosystem is drifting toward `~/.agents/skills/`) and keep `.agents/skills/` for projects. Whatever the convergence point turns out to be, skillsync treats it as just another view, so users are covered before, during, and after the transition.
 
-**Registry maintenance** — regenerating from vercel-labs/skills `agents.ts` is optional coverage sync. Users bridge gaps instantly via `agents.local.tsv`.
+**Registry maintenance** — regenerating from vercel-labs/skills `agents.ts` is optional coverage sync. Users bridge gaps instantly via `[[agents]]` in `skillsyncrc`.
 
 ## 9. Out of Scope
 
@@ -188,13 +189,13 @@ For formenos.land tools the planned stable URL is `https://get.formenos.land/<to
 | Marketplace / registry hosting | [skills.sh](https://skills.sh) and similar serve discovery |
 | Skill format changes | Governed by agentskills.io / AAIF |
 | Project-scope sync | Managed by the repo (git, submodules, copies) |
-| Windows symlink semantics | Future work; `--copy` fallback available |
+| Windows directory links | Symlink when allowed; junction fallback; `--copy` for non-NTFS |
 | Cloud-library vendors | No filesystem surface (e.g. Perplexity Computer) |
 
 ## 10. Open Questions
 
 1. Should `sources.lock` be standardized in v1?
-2. Should project-scope `.agents/sources.conf` be supported for team repos?
+2. Should project-scope `.agents/skillsyncrc` be supported for team repos?
 3. Should `remove` of a `sources/local/` skill offer to delete the files too (currently: never)?
 
 ## 11. References

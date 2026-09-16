@@ -1,7 +1,8 @@
 # Agent skills path registry for skillsync — GENERATED FILE, do not edit by hand.
-# Regenerate with: registry/generate.sh [commit-sha]
+# Regenerate with: make agentregistry
+#   or: go run ./internal/agentregistry/gen [commit-sha]
 # Upstream: https://github.com/vercel-labs/skills src/agents.ts @ 9230fe8d4879e4d9ba04e7a31147477ffbcc51ca
-# Generated: 2026-07-25
+# Generated: 2026-09-16
 #
 # Format: agent_id<TAB>display_name<TAB>global_path<TAB>project_path
 #   - Paths may use ~ (home), ${VAR:-default} (env-overridable home dirs,
@@ -9,8 +10,8 @@
 #     (first alternate whose parent directory exists wins, else the first).
 #   - global_path "-" means project-only agent: no global view is created.
 #
-# Local overrides: put rows in $XDG_CONFIG_HOME/skillsync/agents.local.tsv
-# (same format); rows there win over this file by agent_id.
+# Local overrides: [[agents]] tables in $XDG_CONFIG_HOME/skillsyncrc
+# (same fields); rows there win over this file by agent_id.
 #
 # Known out of scope: Perplexity Computer (skills live in a cloud library
 # uploaded via its UI — no local filesystem folder to link).

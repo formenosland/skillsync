@@ -7,42 +7,45 @@ Instructions for coding agents working in this repository.
 
 skillsync: one canonical skill store, many agent views (GNU Stow model for [Agent Skills](https://agentskills.io)). Architecture: [docs/DESIGN.md](docs/DESIGN.md). Human usage: [README.md](README.md). Contribution process: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-End-user agents *operating* the installed CLI use [skill/SKILL.md](skill/SKILL.md) — that is not this file.
+The CLI is a Go binary (`cmd/skillsync`, `internal/…`). End-user agents *operating* the installed CLI use [skill/SKILL.md](skill/SKILL.md) — that is not this file.
 
 ## Commands
 
 ```sh
-make test            # sandboxed suite (tests/run.sh); requires ShellCheck v0.11.0
-make shellcheck      # lint; version must match SHELLCHECK_VERSION in Makefile
-./bin/skillsync help # run from checkout
-./install.sh         # local install / update
+make                 # CGO_ENABLED=0 go build -o bin/skillsync ./cmd/skillsync
+make test            # go test ./...
+make agentregistry   # refresh internal/agentregistry/agents.tsv from pinned vercel-labs/skills
+make install         # go install ./cmd/skillsync
+./bin/skillsync help # after make
 ```
 
-Bump ShellCheck pin in both `Makefile` and `.github/workflows/ci.yml` (`SHELLCHECK_VERSION`) together. Rules: `.shellcheckrc`.
+`make agentregistry SHA=<upstream-commit>` bumps the pin. CI `agentregistry-drift` re-runs the generator against the SHA in the TSV header. Extend `prefixes` in `internal/agentregistry/gen/parse.go` if upstream adds a path token.
 
 ## Non-negotiables
 
-1. **Ownership invariant:** skillsync owns the store (symlinks it created only); humans own sources. Never delete skill *files* — only store/view links skillsync made. Unmanaged real dirs in the store: skip / refuse / flag — do not touch.
-2. **POSIX sh only** — `bin/skillsync`, `install.sh`, `registry/generate.sh`, `tests/run.sh`. No bashisms. `make shellcheck` must stay clean.
-3. **`registry/agents.tsv` is generated** — never hand-edit. Regenerate with `registry/generate.sh <upstream-sha>`; extend `prefix()` if upstream adds a path token.
+1. **Ownership invariant:** skillsync owns the store (links it created only); humans own sources. Never delete skill *files* — only store/view links skillsync made. Unmanaged real dirs in the store: skip / refuse / flag — do not touch.
+2. **Go CLI, CGO off** — no host awk/sed/git required at runtime (go-git for HTTPS). Maintainer agent-registry refresh is `go run ./internal/agentregistry/gen` (`make agentregistry`).
+3. **`internal/agentregistry/agents.tsv` is generated** — never hand-edit. Regenerate with `make agentregistry` or `make agentregistry SHA=<upstream-sha>`; extend `prefixes` in `internal/agentregistry/gen/parse.go` if upstream adds a path token. Embedded next to `Load` (`//go:embed` is package-relative).
 4. Keep behavior **`--dry-run`-able** and **`--yes`-able** (automation first).
-5. **Docs travel with behavior:** same change updates `README.md`, `docs/DESIGN.md`, and `skill/SKILL.md` when semantics change. Do not hand-edit `VERSION` in `bin/skillsync` or invent git tags — [cocogitto](https://docs.cocogitto.io/) (`cog.toml`) owns version bumps and `CHANGELOG.md` on release.
+5. **Docs travel with behavior:** same change updates `README.md`, `docs/DESIGN.md`, and `skill/SKILL.md` when semantics change. Do not invent git tags — [cocogitto](https://docs.cocogitto.io/) (`cog.toml`) owns version bumps. Version string lives in `internal/cli/app.go` (`Version`).
+6. **Config is one file:** `${XDG_CONFIG_HOME:-$HOME/.config}/skillsyncrc` (TOML), or `$SKILLSYNC_HOME/skillsyncrc`. No `sources.conf`, `exclude.conf`, `config.toml`, or `agents.local.tsv`.
 
 ## Boundaries
 
 - Do not weaken the ownership invariant to “helpfully” delete `sources/local/` or other user trees.
 - Do not rename this project to `skills` (collides with vercel’s npm package / common paths).
 - Store skill names must match Agent Skills `name` rules: `^[a-z0-9]+(-[a-z0-9]+)*$`, max 64 chars.
-- Two uninstalls by design: `install.sh --uninstall` or `brew uninstall skillsync` (tool only) vs `skillsync uninstall` (views/data; `--purge` needs typed `nuke` unless `--yes`).
+- Two uninstalls by design: `brew uninstall skillsync` (or delete the `go install` binary) vs `skillsync uninstall` (views/data; `--purge` needs typed `nuke` unless `--yes`).
+- Occupancy: `sync` never steals an occupied name; do not reintroduce org/user/local layers.
+- Do not add a curl `install.sh` that clones the repo or copies `bin/` (gitignored). Distribution is Homebrew, `go install`, or `make`.
 
 ## Pitfalls (do not reintroduce)
 
-- Avoid `cmd | while …` under `set -e` when the loop can fail or must update counters — use a temp file + `while read <file`.
-- Do not pipe into interactive helpers (`pick_multi`): the pipe is not a tty, so the picker never draws and selection is empty. Pass candidates in a file; keep stdin for `read`.
-- Path equality: resolve with `pwd -P` (`resolve_dir`). Linked views resolve to the store; use `view_is_native` when checking “is this the store directory itself?”.
-- Prefer explicit `if` over `A && B || C` for control flow.
-- Character classes like `[a-z]` in `case` can match uppercase under some UTF-8 locales — use `LC_ALL=C` (see `is_safe_skill_name`).
+- Do not pipe into interactive pickers: stdin must stay a TTY.
+- Path equality: resolve with `EvalSymlinks` / `fsops.PathsEqual`. Linked views resolve to the store; use `viewIsNative` when checking “is this the store directory itself?”.
+- Character classes for skill names must be ASCII-only (`IsSafeName`), not locale-dependent `[a-z]`.
+- Windows directory views: symlink, then junction if privilege is missing; `--copy` for non-NTFS.
 
 ## Tests
 
-Every behavior change needs a test; every bug fix needs a regression test. Suite is sandboxed (`SKILLSYNC_HOME` / fake `HOME`); no network; never touch real agent dirs.
+Every behavior change needs a test; every bug fix needs a regression test. `go test ./...` is sandboxed (`SKILLSYNC_HOME` / fake `HOME`); no network; never touch real agent dirs.

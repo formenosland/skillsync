@@ -7,9 +7,9 @@ branch_whitelist = ["main"]
 pre_bump_hooks = [
 	"""
 	tmp=$(mktemp)
-	sed 's/^VERSION=.*/VERSION="{{version}}"/' bin/skillsync > "$tmp"
-	mv "$tmp" bin/skillsync
-	git add bin/skillsync
+	sed 's/^const Version = \".*\"/const Version = \"{{version}}\"/' internal/cli/app.go > "$tmp"
+	mv "$tmp" internal/cli/app.go
+	git add internal/cli/app.go
 	""",
 ]
 

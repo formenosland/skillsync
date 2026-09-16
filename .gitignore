@@ -3,21 +3,24 @@
 
 # Explicit includes
 !.github/
-!bin/
+!cmd/
 !docs/
-!registry/
+!internal/
 !skill/
-!tests/
 !.editorconfig
 !.gitignore
-!.shellcheckrc
 !AGENTS.md
 !CHANGELOG.md
 !CODE_OF_CONDUCT.md
 !cog.toml
 !CONTRIBUTING.md
-!install.sh
 !LICENSE
 !Makefile
 !README.md
 !SECURITY.md
+!go.mod
+!go.sum
+
+# Ignore Artifacts
+.DS_Store
+*.log

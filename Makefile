@@ -1,40 +1,34 @@
 .POSIX:
 
-# Keep in sync with .github/workflows/ci.yml env.SHELLCHECK_VERSION
-SHELLCHECK_VERSION = 0.11.0
-SHELLCHECK_SRCS = bin/skillsync install.sh registry/generate.sh tests/run.sh
+GO = go
+CGO_ENABLED = 0
+
+.PHONY: all
+all: build
 
 .PHONY: help
 help:
 	@printf '%s\n' \
 		"targets:" \
-		"  test         run sandboxed suite (tests/run.sh)" \
-		"  shellcheck   lint with ShellCheck v$(SHELLCHECK_VERSION) + .shellcheckrc" \
-		"  install      install via ./install.sh" \
-		"  uninstall    remove tool only (install.sh --uninstall --yes)"
+		"  all          build bin/skillsync (default)" \
+		"  build        same as all" \
+		"  test         go test ./..." \
+		"  agentregistry  refresh internal/agentregistry/agents.tsv (SHA= for upstream commit)" \
+		"  install      go install ./cmd/skillsync"
+
+.PHONY: build
+build:
+	mkdir -p bin
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) build -o bin/skillsync ./cmd/skillsync
 
 .PHONY: test
-test:
-	tests/run.sh
+test: build
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) test ./...
 
-.PHONY: shellcheck
-shellcheck:
-	@command -v shellcheck >/dev/null || { \
-		printf 'error: shellcheck not installed (want v%s)\n' "$(SHELLCHECK_VERSION)" >&2; \
-		printf 'hint: brew install shellcheck   # or your package manager\n' >&2; \
-		exit 1; \
-	}
-	@v=$$(shellcheck --version | awk '/^version:/{print $$2; exit}'); \
-	[ "$$v" = "$(SHELLCHECK_VERSION)" ] || { \
-		printf 'error: shellcheck %s, want %s (upgrade to match CI)\n' "$$v" "$(SHELLCHECK_VERSION)" >&2; \
-		exit 1; \
-	}
-	shellcheck $(SHELLCHECK_SRCS)
+.PHONY: agentregistry
+agentregistry:
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) run ./internal/agentregistry/gen $(SHA)
 
 .PHONY: install
 install:
-	./install.sh
-
-.PHONY: uninstall
-uninstall:
-	./install.sh --uninstall --yes
+	CGO_ENABLED=$(CGO_ENABLED) $(GO) install ./cmd/skillsync

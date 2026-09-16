@@ -3,7 +3,7 @@
 > One skill store. Every agent. Install a skill once — it shows up in Claude Code, Cursor, Codex, Gemini CLI, and the rest of your toolchain.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![POSIX sh](https://img.shields.io/badge/shell-POSIX%20sh-lightgrey.svg)](bin/skillsync)
+[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8)](https://go.dev)
 [![CI](https://github.com/formenosland/skillsync/actions/workflows/ci.yml/badge.svg)](https://github.com/formenosland/skillsync/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/formenosland/skillsync)](https://github.com/formenosland/skillsync/releases)
 
@@ -28,6 +28,14 @@ github.com/acme-corp/skills
   bar             Bar skill description
 
 $ skillsync status
+skillsync 0.3.4
+  store     ~/.local/share/skillsync/store
+  config    ~/.config/skillsyncrc
+  skills    2 from 1 source
+
+Sources
+  up to date github.com/acme-corp/skills
+
 Agent views
   linked     ~/.claude/skills        claude-code
   linked     ~/.cursor/skills        cursor
@@ -37,7 +45,7 @@ Agent views
 
 The store only ever contains symlinks created by skillsync. Your skill files stay in git repos or folders you control — skillsync never deletes them. `skillsync --version` prints the installed version.
 
-Zero runtime dependencies beyond POSIX `sh`, `git`, `ln`, and standard coreutils.
+Zero extra runtime tools: one static binary (git clone/pull via the library).
 
 ## Install
 
@@ -46,23 +54,17 @@ brew install formenosland/tap/skillsync
 ```
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
+go install github.com/formenosland/skillsync/cmd/skillsync@latest
 ```
-
-Homebrew tracks tagged releases via [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap); each GitHub Release bumps `Formula/skillsync.rb` through that tap’s `bump.yml` workflow. The curl installer also installs the latest GitHub release (re-run to update). From a checkout, `./install.sh` copies that tree with no network. Do not mix the two on `PATH` unless you know which binary wins.
-
-<details>
-<summary>Override the git ref</summary>
-
-`SKILLSYNC_INSTALL_REF` is optional — a tag, branch, or commit when you do not want the latest release (`main` for unreleased HEAD).
 
 ```sh
-SKILLSYNC_INSTALL_REF=main curl -fsSL https://raw.githubusercontent.com/formenosland/skillsync/main/install.sh | sh
+git clone https://github.com/formenosland/skillsync.git
+cd skillsync
+make          # ./bin/skillsync
+make install  # go install ./cmd/skillsync  (GOBIN / GOPATH/bin)
 ```
 
-The installer copies the app to `~/.local/share/skillsync/app/` and symlinks `~/.local/bin/skillsync` (printing a one-line PATH fix if `~/.local/bin` isn't on your PATH).
-
-</details>
+Homebrew tracks tagged releases via [formenosland/homebrew-tap](https://github.com/formenosland/homebrew-tap); each GitHub Release bumps `Formula/skillsync.rb` through that tap’s `bump.yml` workflow. `go install @latest` follows the module proxy. Do not mix Homebrew and `go install` on `PATH` unless you know which binary wins.
 
 ## Quickstart
 
@@ -89,7 +91,7 @@ On a TTY, `add` shows a checkbox list: new names on by default; names already in
 | `remove --all` | Remove every installed skill (use `skillsync --yes remove --all` in scripts) |
 | `remove --source <url\|path>` | Unregister a source and drop its skills |
 | `list` (`ls`) | Catalog grouped by source with descriptions (tty); one name per line when piped. `--pretty` / `--names` (`-1`) force either form |
-| `status` | Rich overview: skills, origins, agent view states, sources |
+| `status` | Dashboard: paths, counts, source health vs last fetch, agent views, excludes |
 | `doctor` | Diagnose broken links, drifted views, missing links (exit 1 on actionable findings; warnings alone do not fail) |
 | `uninstall [--keep] [--purge]` (`nuke`) | Reverse `init` (see below) |
 | `completion bash\|zsh` | Shell completion (`skillsync remove <TAB>` completes skills) |
@@ -106,15 +108,16 @@ skillsync remove foo --dry-run
 
 Non-interactive: `skillsync init --yes` when agents need linking; `skillsync --yes add <source>`; `skillsync remove foo` or `skillsync remove --all --yes` (bare `remove` with no TTY needs names or `--all`).
 
-`remove` drops the skill from the store — and therefore every agent — immediately. Source files are never touched. The name is recorded in `exclude.conf` so `sync` won't resurrect it; re-`add` the source (or edit the file) to bring it back. Names you uncheck on `add` (new names only) are excluded the same way.
+`remove` drops the skill from the store — and therefore every agent — immediately. Source files are never touched. The name is recorded in `skillsyncrc` (`excludes`) so `sync` won't resurrect it; re-`add` the source (or edit the file) to bring it back. Names you uncheck on `add` (new names only) are excluded the same way.
 
 ### Two kinds of uninstall
 
 | Command | Removes |
 |---------|---------|
 | `skillsync uninstall` | Agent view symlinks only (clean reverse of `init`); add `--keep` to leave real copies in each agent folder, `--purge` to also delete store, sources, and config (type `nuke` to confirm; `skillsync --yes uninstall --purge` skips prompts) |
-| `install.sh --uninstall` | The curl-installed tool (`~/.local/bin/skillsync` + app copy) — never your skill data |
 | `brew uninstall skillsync` | The Homebrew keg only — never your skill data |
+
+A `go install` binary is just a file on `PATH` (`$(go env GOPATH)/bin/skillsync` unless `GOBIN` is set); delete it to remove the tool. If you previously used the old curl `install.sh`, remove `~/.local/bin/skillsync` and `~/.local/share/skillsync/app/` — that copy is unused now and is not skill data.
 
 ### Shell completion
 
@@ -138,23 +141,23 @@ eval "$(skillsync completion zsh)"    # ~/.zshrc
 1. **Store** — one symlink per *installed* skill name, pointing into a source. Agent views are a single symlink to this directory.
 2. **Views** — each agent's global skills dir is a symlink to the store.
 3. **Sources** — git URLs cloned under `sources/<host>/<owner>/<repo>/`; local folders referenced in place. Occupied names are not replaced unless you check override on `add`.
-4. **`sources.conf`** — one git URL or absolute path per line.
+4. **`skillsyncrc`** — TOML list of git URLs or absolute paths, plus `excludes` and optional `[[agents]]`.
 
 Everything lives in XDG paths (no new dotfolder in your home):
 
 | What | Path |
 |------|------|
-| Config (`sources.conf`, `exclude.conf`, `agents.local.tsv`) | `${XDG_CONFIG_HOME:-~/.config}/skillsync/` |
+| Config (`skillsyncrc`) | `${XDG_CONFIG_HOME:-~/.config}/skillsyncrc` |
 | Data (`store/`, `sources/`, `backups/`, `app/`) | `${XDG_DATA_HOME:-~/.local/share}/skillsync/` |
-| Single-root override | `SKILLSYNC_HOME=<dir>` |
+| Single-root override | `SKILLSYNC_HOME=<dir>` (config at `$SKILLSYNC_HOME/skillsyncrc`) |
 
 `backups/` is only from `init` (leftovers when replacing a real agent skills folder), not a library backup.
 
 ## Supported agents
 
-[`registry/agents.tsv`](registry/agents.tsv) covers ~75 agents — Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, OpenCode, Zed, Cline, Warp, Goose, Windsurf, Kiro, Junie, Amp, Hermes, OpenClaw, and more. It is **generated, never hand-edited** (see [Contributing](CONTRIBUTING.md) to refresh it). Paths may use env-overridable homes (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`, …) and `|` fallback chains (OpenClaw's `~/.openclaw` → `~/.clawdbot` → `~/.moltbot`). `init` only links agents that are actually installed — it never litters your home directory.
+[`internal/agentregistry/agents.tsv`](internal/agentregistry/agents.tsv) covers ~75 agents — Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, OpenCode, Zed, Cline, Warp, Goose, Windsurf, Kiro, Junie, Amp, Hermes, OpenClaw, and more. It is **generated, never hand-edited** (see [Contributing](CONTRIBUTING.md) to refresh it). Paths may use env-overridable homes (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`, …) and `|` fallback chains (OpenClaw's `~/.openclaw` → `~/.clawdbot` → `~/.moltbot`). `init` only links agents that are actually installed — it never litters your home directory.
 
-Agent missing or path wrong? Add a row to `~/.config/skillsync/agents.local.tsv` (same TSV format; wins by `agent_id`) — and please open an issue or PR.
+Agent missing or path wrong? Add an `[[agents]]` table to `skillsyncrc` (fields `id`, `display_name`, `global_path`, `project_path`; wins by `id`) — and please open an issue or PR.
 
 ## Compared to vercel-labs/skills
 
@@ -171,7 +174,7 @@ Agent missing or path wrong? Add a row to `~/.config/skillsync/agents.local.tsv`
 | Discovery / marketplace | out of scope ([skills.sh](https://skills.sh) if you want it) | `skills find`, skills.sh |
 | Use without installing | — | `skills use` (temp files + prompt) |
 | Author a skill template | — | `skills init` |
-| Runtime | POSIX `sh`, `git`, `ln` | Node (`npx`) |
+| Runtime | static Go binary | Node (`npx`) |
 | Telemetry | none | on by default (`DISABLE_TELEMETRY` / `DO_NOT_TRACK`) |
 | Install safety | owns only store/view **links**; never deletes skill files | writes/removes under agent skill dirs |
 | Diagnose layout | `doctor` (drifted views, broken links) | — |
@@ -182,7 +185,7 @@ After `skillsync init`, agent folders are views into the store, so `npx skills a
 
 **What if an agent recreates its skills folder as a real directory?** `skillsync doctor` flags it as a drifted view; `skillsync init` heals it (migrating any new skills it finds).
 
-**Windows?** Not yet — symlink semantics differ. `--copy` exists as a stopgap; proper support is future work.
+**Windows?** Directory views use a symlink when the OS allows it, otherwise a junction. `--copy` remains for filesystems without links.
 
 **Is output scriptable?** Yes: colors and symbols degrade automatically when piped (or with `NO_COLOR`/`TERM=dumb`), `list` emits plain names when piped (or with `--names`), global `--yes` skips confirmations (including the `nuke` typed confirm for `--purge`), and `doctor` exits 1 only for actionable problems (broken links, drifted/wrong/missing views)—not for informational warnings such as missing clones.
 
