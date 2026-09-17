@@ -249,23 +249,20 @@ func (a *App) cmdList(args []string) error {
 	return nil
 }
 
-func (a *App) listPretty() {
-	lc := struct{ reset, bold, dim string }{}
-	if a.stdoutTTY() && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb" {
-		lc.reset, lc.bold, lc.dim = a.ui.reset, a.ui.bold, a.ui.dim
-	}
+type catalogRow struct {
+	name, group, cat, blurb string
+}
+
+func (a *App) catalogRows() []catalogRow {
 	idx := a.sourceIndex()
-	type row struct{ name, group, cat, blurb string }
-	var rows []row
+	var rows []catalogRow
 	for _, n := range a.listNames() {
 		e := filepath.Join(a.layout.Store, n)
-		blurb := skill.Shorten(skill.Blurb(e), a.ui.fancy)
 		group, cat := a.skillPlace(e, idx)
-		rows = append(rows, row{n, group, cat, blurb})
-	}
-	if len(rows) == 0 {
-		fmt.Fprintln(a.Stdout, lc.dim+"(empty — run init / add)"+lc.reset)
-		return
+		rows = append(rows, catalogRow{
+			name: n, group: group, cat: cat,
+			blurb: skill.Shorten(skill.Blurb(e), a.ui.fancy),
+		})
 	}
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].group != rows[j].group {
@@ -276,6 +273,19 @@ func (a *App) listPretty() {
 		}
 		return rows[i].name < rows[j].name
 	})
+	return rows
+}
+
+func (a *App) listPretty() {
+	lc := struct{ reset, bold, dim string }{}
+	if a.stdoutTTY() && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb" {
+		lc.reset, lc.bold, lc.dim = a.ui.reset, a.ui.bold, a.ui.dim
+	}
+	rows := a.catalogRows()
+	if len(rows) == 0 {
+		fmt.Fprintln(a.Stdout, lc.dim+"(empty — run init / add)"+lc.reset)
+		return
+	}
 	w := 12
 	for _, r := range rows {
 		if len(r.name) > w {
@@ -356,7 +366,7 @@ func (a *App) cmdRemove(args []string) error {
 	if all {
 		names = a.listNames()
 	} else if len(names) == 0 {
-		picked, err := a.pickMulti("remove which skills?", a.listNames())
+		picked, err := a.pickSkills("remove which skills?")
 		if err != nil {
 			return err
 		}

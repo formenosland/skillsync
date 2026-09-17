@@ -25,8 +25,8 @@ const (
 )
 
 type pickItem struct {
-	label, hint, cat, value string
-	on                      bool
+	label, hint, group, cat, value string
+	on                             bool
 }
 
 type pickList struct {
@@ -78,11 +78,22 @@ func (p *pickList) selected() []string {
 
 func (p *pickList) lines(ui style) []string {
 	out := []string{ui.bold + p.prompt + ui.reset}
-	prevCat := "\x00"
+	prevGroup, prevCat := "\x00", "\x00"
 	for i, it := range p.items {
+		if it.group != prevGroup {
+			if it.group != "" {
+				out = append(out, "  "+ui.bold+it.group+ui.reset)
+			}
+			prevGroup = it.group
+			prevCat = "\x00"
+		}
 		if it.cat != prevCat {
 			if it.cat != "" {
-				out = append(out, "  "+ui.bold+it.cat+ui.reset)
+				indent := "  "
+				if it.group != "" {
+					indent = "    "
+				}
+				out = append(out, indent+ui.bold+it.cat+ui.reset)
 			}
 			prevCat = it.cat
 		}
@@ -206,6 +217,27 @@ func (a *App) runPick(p *pickList) error {
 			paint()
 		}
 	}
+}
+
+func (a *App) pickSkills(prompt string) ([]string, error) {
+	names := a.listNames()
+	if len(names) == 0 {
+		return nil, nil
+	}
+	if a.Yes {
+		return names, nil
+	}
+	if !a.interactive() {
+		return nil, nil
+	}
+	p := &pickList{prompt: prompt}
+	for _, r := range a.catalogRows() {
+		p.items = append(p.items, pickItem{label: r.name, value: r.name, group: r.group, cat: r.cat, on: true})
+	}
+	if err := a.runPick(p); err != nil {
+		return nil, err
+	}
+	return p.selected(), nil
 }
 
 func (a *App) pickMulti(prompt string, items []string) ([]string, error) {

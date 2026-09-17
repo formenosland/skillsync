@@ -78,7 +78,7 @@ skillsync sync                    # pull git sources, refresh vacant names
 
 `init` detects installed agents, moves any existing per-agent skills into `sources/local/` (then registers that path), and replaces each agent's skills folder with a symlink to the store. Anything replaced is backed up first (`~/.local/share/skillsync/backups/`).
 
-On a TTY, `add` (and `init` / bare `remove`) uses an arrow-key checkbox list: space toggles, `a`/`n` all/none, enter accepts, `q` aborts. New names start on; names already in the store are `override` (off until checked). Checking an override replaces that symlink. `--yes` installs unique names only and warns on conflicts.
+On a TTY, `add` (and `init` / bare `remove`) uses an arrow-key checkbox list: space toggles, `a`/`n` all/none, enter accepts, `q` aborts. `add` and `remove` group by occupying source and `skills/<category>` (same derivation as `list`). New names start on; names already in the store are `override` (off until checked). Checking an override replaces that symlink. `--yes` installs unique names only and warns on conflicts.
 
 ## Commands
 
@@ -89,7 +89,7 @@ On a TTY, `add` (and `init` / bare `remove`) uses an arrow-key checkbox list: sp
 | `sync` | Pull all git sources; fill vacant names; never steal occupied names. Also `apply` if `skillsync.toml` is found |
 | `apply` | Install/update repo skills from `skillsync.toml` (`--global`, `--prune`) |
 | `unapply [names…]` | Remove skillsync-managed project links (home store untouched) |
-| `remove [names...]` (`rm`) | Remove skills from everywhere; bare `remove` opens an interactive picker |
+| `remove [names...]` (`rm`) | Remove skills from everywhere; bare `remove` opens a picker grouped like `list` |
 | `remove --all` | Remove every installed skill (use `skillsync --yes remove --all` in scripts) |
 | `remove --source <url\|path>` | Unregister a source and drop its skills |
 | `list` (`ls`) | Catalog grouped by source and `skills/<category>` (tty); one name per line when piped. `--pretty` / `--names` (`-1`) force either form |
@@ -217,7 +217,7 @@ After `skillsync init`, agent folders are views into the store, so `npx skills a
 2. `skills/<name>/SKILL.md`
 3. `skills/<category>/<name>/SKILL.md` — e.g. [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills)
 
-Nothing else is collected (no `docs/…`, no deeper trees). The store and agent views stay flat by skill `name`. `list` and the `add` picker group names under those category folders. If `add` finds nothing, it names these layouts.
+Nothing else is collected (no `docs/…`, no deeper trees). The store and agent views stay flat by skill `name`. `list` and the `add`/`remove` pickers group names under those category folders. If `add` finds nothing, it names these layouts.
 
 **Windows?** Directory views use a symlink when the OS allows it, otherwise a junction. `--copy` remains for filesystems without links.
 

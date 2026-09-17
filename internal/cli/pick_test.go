@@ -73,6 +73,24 @@ func TestPickApply(t *testing.T) {
 	}
 }
 
+func TestPickGroupAndCategory(t *testing.T) {
+	p := &pickList{
+		prompt: "remove?",
+		items: []pickItem{
+			{label: "alpha", value: "alpha", group: "src-a", cat: "tools", on: true},
+			{label: "beta", value: "beta", group: "src-a", cat: "web", on: true},
+			{label: "gamma", value: "gamma", group: "src-b", cat: "", on: true},
+		},
+	}
+	body := strings.Join(p.lines(style{}), "\n")
+	if !strings.Contains(body, "src-a") || !strings.Contains(body, "src-b") {
+		t.Fatalf("groups: %s", body)
+	}
+	if !strings.Contains(body, "tools") || !strings.Contains(body, "web") {
+		t.Fatalf("categories: %s", body)
+	}
+}
+
 func TestPickInstallDefaults(t *testing.T) {
 	p := installPickList([]installCand{
 		{name: "keep", kind: "new", cat: "tools"},

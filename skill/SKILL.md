@@ -52,7 +52,7 @@ skillsync --yes apply --prune        # drop project links that left the manifest
 skillsync --yes apply --global       # also install those names into the home store
 skillsync unapply                    # remove managed project links (not the home store)
 skillsync remove terse               # gone from every agent, instantly
-skillsync remove                     # interactive checkbox picker (tty, no args)
+skillsync remove                     # checkbox picker grouped like list (tty)
 skillsync --yes remove --all         # remove every installed skill (scripts)
 skillsync remove --source ~/dev/my-skills
 skillsync list                       # catalog on a tty; names when piped
@@ -86,7 +86,7 @@ follow the Agent Skills `name` rules: `^[a-z0-9]+(-[a-z0-9]+)*$`, max 64 chars.
 - Git clones live under `sources/<host>/<owner>/<repo>/`. Path sources are
   not copied. Skills are only those with `SKILL.md` in a root folder,
   `skills/<name>`, or `skills/<category>/<name>`. The store is flat by name;
-  `list` / `add` group by category. `add` names these layouts if it finds none.
+  `list` / `add` / `remove` group by category. `add` names these layouts if it finds none.
 - Real directories in the store are unmanaged: sync skips them, remove
   refuses them, doctor tells you to move them into a source and `add` it.
 
