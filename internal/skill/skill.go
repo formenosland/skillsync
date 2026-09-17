@@ -1,17 +1,17 @@
 package skill
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// MaxFindDepth is how many directory levels below a source root we walk for SKILL.md.
-const MaxFindDepth = 4
+// FindHint describes the only layouts FindInSource accepts.
+const FindHint = "only SKILL.md in root skill folders, skills/<name>, or skills/<category>/<name>"
 
 var nameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
@@ -20,8 +20,9 @@ func IsSafeName(s string) bool {
 }
 
 type Found struct {
-	Dir  string
-	Name string
+	Dir      string
+	Name     string
+	Category string
 }
 
 func NameFromDir(dir string) string {
@@ -130,45 +131,84 @@ func extractFM(b []byte) map[string]any {
 	return m
 }
 
-func skipFindDir(name string) bool {
-	switch name {
-	case ".git", "node_modules":
-		return true
-	}
+func skipDotDir(name string) bool {
 	return strings.HasPrefix(name, ".")
+}
+
+func hasSkillMD(dir string) bool {
+	st, err := os.Stat(filepath.Join(dir, "SKILL.md"))
+	return err == nil && !st.IsDir()
+}
+
+func listSubdirs(path string) []string {
+	ents, err := os.ReadDir(path)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range ents {
+		if !e.IsDir() || skipDotDir(e.Name()) {
+			continue
+		}
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	return names
+}
+
+// Category is the skills/<category>/<name> folder, or empty for root and skills/<name> layouts.
+func Category(sourceRoot, skillDir string) string {
+	rel, err := filepath.Rel(sourceRoot, skillDir)
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	if len(parts) == 3 && parts[0] == "skills" && parts[1] != "" && parts[2] != "." {
+		return parts[1]
+	}
+	return ""
 }
 
 func FindInSource(root string) []Found {
 	var out []Found
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
+	seen := map[string]struct{}{}
+	add := func(dir, category string) {
+		if !hasSkillMD(dir) {
+			return
 		}
-		if !d.IsDir() {
-			return nil
+		n := NameFromDir(dir)
+		if n == "" {
+			return
 		}
-		if path != root && skipFindDir(d.Name()) {
-			return filepath.SkipDir
+		if _, ok := seen[n]; ok {
+			return
 		}
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return nil
+		seen[n] = struct{}{}
+		out = append(out, Found{Dir: dir, Name: n, Category: category})
+	}
+
+	add(root, "")
+	for _, name := range listSubdirs(root) {
+		if name == "skills" {
+			continue
 		}
-		depth := 0
-		if rel != "." {
-			depth = strings.Count(rel, string(filepath.Separator)) + 1
+		add(filepath.Join(root, name), "")
+	}
+
+	skillsDir := filepath.Join(root, "skills")
+	st, err := os.Stat(skillsDir)
+	if err != nil || !st.IsDir() {
+		return out
+	}
+	for _, name := range listSubdirs(skillsDir) {
+		d := filepath.Join(skillsDir, name)
+		if hasSkillMD(d) {
+			add(d, "")
+			continue
 		}
-		if depth > MaxFindDepth {
-			return filepath.SkipDir
+		for _, nested := range listSubdirs(d) {
+			add(filepath.Join(d, nested), name)
 		}
-		if _, err := os.Stat(filepath.Join(path, "SKILL.md")); err != nil {
-			return nil
-		}
-		n := NameFromDir(path)
-		if n != "" {
-			out = append(out, Found{Dir: path, Name: n})
-		}
-		return filepath.SkipDir
-	})
+	}
 	return out
 }

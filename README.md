@@ -85,14 +85,14 @@ On a TTY, `add` shows a checkbox list: new names on by default; names already in
 | Command | Description |
 |---------|-------------|
 | `init` | Create the store, migrate per-agent skills, link agent views |
-| `add <url\|path>` | Register a git repo or local folder; pick names (`SKILL.md` within 4 directory levels) |
+| `add <url\|path>` | Register a git repo or local folder; pick names (`SKILL.md` in root folders, `skills/<name>`, or `skills/<category>/<name>`) |
 | `sync` | Pull all git sources; fill vacant names; never steal occupied names. Also `apply` if `skillsync.toml` is found |
 | `apply` | Install/update repo skills from `skillsync.toml` (`--global`, `--prune`) |
 | `unapply [names…]` | Remove skillsync-managed project links (home store untouched) |
 | `remove [names...]` (`rm`) | Remove skills from everywhere; bare `remove` opens an interactive picker |
 | `remove --all` | Remove every installed skill (use `skillsync --yes remove --all` in scripts) |
 | `remove --source <url\|path>` | Unregister a source and drop its skills |
-| `list` (`ls`) | Catalog grouped by source with descriptions (tty); one name per line when piped. `--pretty` / `--names` (`-1`) force either form |
+| `list` (`ls`) | Catalog grouped by source and `skills/<category>` (tty); one name per line when piped. `--pretty` / `--names` (`-1`) force either form |
 | `status` | Dashboard: paths, counts, source health vs last fetch, agent views, excludes |
 | `doctor` | Diagnose broken links, drifted views, missing links (exit 1 on actionable findings; warnings alone do not fail) |
 | `uninstall [--keep] [--purge]` (`nuke`) | Reverse `init` (see below) |
@@ -211,7 +211,13 @@ After `skillsync init`, agent folders are views into the store, so `npx skills a
 
 **What if an agent recreates its skills folder as a real directory?** `skillsync doctor` flags it as a drifted view; `skillsync init` heals it (migrating any new skills it finds).
 
-**Can a source nest skills under category folders?** Yes, up to **4 directory levels** below the source root (for example `skills/engineering/foo` in [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills)). Deeper trees are ignored. Agent views stay one level deep by skill `name`. If `add` finds nothing, it says so and mentions that 4-depth limit.
+**Which skill folders are scanned?** Only these layouts (dot folders at the source root are ignored):
+
+1. `SKILL.md` in the source root, or in an immediate child folder (`<name>/SKILL.md`)
+2. `skills/<name>/SKILL.md`
+3. `skills/<category>/<name>/SKILL.md` — e.g. [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills)
+
+Nothing else is collected (no `docs/…`, no deeper trees). The store and agent views stay flat by skill `name`. `list` and the `add` picker group names under those category folders. If `add` finds nothing, it names these layouts.
 
 **Windows?** Directory views use a symlink when the OS allows it, otherwise a junction. `--copy` remains for filesystems without links.
 

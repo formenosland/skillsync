@@ -227,11 +227,12 @@ func TestAddOccupancyAndList(t *testing.T) {
 	if code != 0 {
 		t.Fatal(errb)
 	}
-	if code != 0 {
-		t.Fatal(errb)
-	}
-	if !strings.Contains(errb, "no skills found in source (within the 4-depth limit)") {
+	if !strings.Contains(errb, "no skills found in source (only SKILL.md in root skill folders, skills/<name>, or skills/<category>/<name>)") {
 		t.Fatalf("empty add: %s", errb)
+	}
+	out, _, _ = s.run("list", "--pretty")
+	if !strings.Contains(out, "engineering") || !strings.Contains(out, "verify") {
+		t.Fatalf("pretty categories: %s", out)
 	}
 
 	out, _, _ = s.yes("status")

@@ -112,7 +112,13 @@ Skills under a skills root stay one level deep (`<root>/<name>/SKILL.md`). Neste
 
 ### 3.4 Skill discovery
 
-Within each source, any directory that contains `SKILL.md` is a skill, walked at most **4 directory levels** below the source root. Category folders such as `skills/engineering/<name>` in [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills) are collected; the store and agent views stay **flat** (`<root>/<name>/SKILL.md`) using the `name:` frontmatter field, falling back to the directory basename. Descent stops at a skill directory (nested example `SKILL.md` files are ignored). `.git`, `node_modules`, and other hidden directories are skipped. If `add` finds no skills, it reports that and names the 4-depth limit. Names must match the [Agent Skills](https://agentskills.io/specification) `name` rules: 1–64 characters, `/^[a-z0-9]+(-[a-z0-9]+)*$/` (lowercase, digits, single hyphens; no leading/trailing/consecutive hyphens). Unsafe names are skipped during materialize/migration and refused by `remove`.
+Sources are scanned for **exactly** these layouts (dot-directories at the source root are skipped):
+
+1. **Root export** — `SKILL.md` in the source root, or `<name>/SKILL.md` as an immediate child.
+2. **`skills/` folder** — `skills/<name>/SKILL.md`.
+3. **Categorized `skills/`** — `skills/<category>/<name>/SKILL.md` (for example [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills)). `list` and the `add` picker group by `<category>`.
+
+No other paths are skills (not `docs/…`, not `skills/<category>/<name>/…` deeper). The store and agent views stay **flat** (`<root>/<name>/SKILL.md`). The store name comes from the `name:` frontmatter field, falling back to the directory basename. If `add` finds no skills, it reports that and lists these layouts. Names must match the [Agent Skills](https://agentskills.io/specification) `name` rules: 1–64 characters, `/^[a-z0-9]+(-[a-z0-9]+)*$/` (lowercase, digits, single hyphens; no leading/trailing/consecutive hyphens). Unsafe names are skipped during materialize/migration and refused by `remove`.
 
 ### 3.5 Agent registry
 

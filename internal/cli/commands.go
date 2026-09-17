@@ -138,7 +138,7 @@ func (a *App) cmdAdd(args []string) error {
 	idx := a.sourceIndex()
 	var cands []installCand
 	for _, f := range skill.FindInSource(root) {
-		c := installCand{name: f.Name, dir: f.Dir, kind: "new"}
+		c := installCand{name: f.Name, dir: f.Dir, kind: "new", cat: f.Category}
 		dest := filepath.Join(a.layout.Store, f.Name)
 		if a.storeOccupied(f.Name) && !fsops.PathsEqual(dest, f.Dir) {
 			c.kind = "override"
@@ -146,8 +146,14 @@ func (a *App) cmdAdd(args []string) error {
 		}
 		cands = append(cands, c)
 	}
+	sort.Slice(cands, func(i, j int) bool {
+		if cands[i].cat != cands[j].cat {
+			return cands[i].cat < cands[j].cat
+		}
+		return cands[i].name < cands[j].name
+	})
 	if len(cands) == 0 {
-		a.info(fmt.Sprintf("no skills found in source (within the %d-depth limit)", skill.MaxFindDepth))
+		a.info("no skills found in source (" + skill.FindHint + ")")
 		a.end("add done " + a.ui.dim + fmt.Sprintf("(%d ok, %d warnings)", a.nOK, a.nWarn) + a.ui.reset)
 		return nil
 	}
@@ -241,12 +247,13 @@ func (a *App) listPretty() {
 		lc.reset, lc.bold, lc.dim = a.ui.reset, a.ui.bold, a.ui.dim
 	}
 	idx := a.sourceIndex()
-	type row struct{ name, group, blurb string }
+	type row struct{ name, group, cat, blurb string }
 	var rows []row
 	for _, n := range a.listNames() {
 		e := filepath.Join(a.layout.Store, n)
 		blurb := skill.Shorten(skill.Blurb(e), a.ui.fancy)
-		rows = append(rows, row{n, a.skillGroup(e, idx), blurb})
+		group, cat := a.skillPlace(e, idx)
+		rows = append(rows, row{n, group, cat, blurb})
 	}
 	if len(rows) == 0 {
 		fmt.Fprintln(a.Stdout, lc.dim+"(empty — run init / add)"+lc.reset)
@@ -255,6 +262,9 @@ func (a *App) listPretty() {
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].group != rows[j].group {
 			return rows[i].group < rows[j].group
+		}
+		if rows[i].cat != rows[j].cat {
+			return rows[i].cat < rows[j].cat
 		}
 		return rows[i].name < rows[j].name
 	})
@@ -268,6 +278,7 @@ func (a *App) listPretty() {
 		w = 32
 	}
 	prev := ""
+	prevCat := "\x00"
 	for i, r := range rows {
 		if r.group != prev {
 			if i > 0 {
@@ -275,6 +286,17 @@ func (a *App) listPretty() {
 			}
 			fmt.Fprintln(a.Stdout, lc.bold+r.group+lc.reset)
 			prev = r.group
+			prevCat = "\x00"
+		}
+		if r.cat != prevCat {
+			if r.cat != "" {
+				fmt.Fprintln(a.Stdout, "  "+lc.bold+r.cat+lc.reset)
+			}
+			prevCat = r.cat
+		}
+		indent := "  "
+		if r.cat != "" {
+			indent = "    "
 		}
 		pad := w - len(r.name)
 		if pad < 1 {
@@ -282,9 +304,9 @@ func (a *App) listPretty() {
 		}
 		spaces := strings.Repeat(" ", pad)
 		if r.blurb != "" {
-			fmt.Fprintf(a.Stdout, "  %s%s%s%s  %s%s%s\n", lc.bold, r.name, lc.reset, spaces, lc.dim, r.blurb, lc.reset)
+			fmt.Fprintf(a.Stdout, "%s%s%s%s%s  %s%s%s\n", indent, lc.bold, r.name, lc.reset, spaces, lc.dim, r.blurb, lc.reset)
 		} else {
-			fmt.Fprintf(a.Stdout, "  %s%s%s\n", lc.bold, r.name, lc.reset)
+			fmt.Fprintf(a.Stdout, "%s%s%s%s\n", indent, lc.bold, r.name, lc.reset)
 		}
 	}
 }

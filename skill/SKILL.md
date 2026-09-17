@@ -83,9 +83,9 @@ follow the Agent Skills `name` rules: `^[a-z0-9]+(-[a-z0-9]+)*$`, max 64 chars.
   `skillsyncrc`, backs up what it replaces, and only links agents that are
   actually installed.
 - Git clones live under `sources/<host>/<owner>/<repo>/`. Path sources are
-  not copied. Nested category folders in a source (e.g. `skills/engineering/foo`)
-  are discovered up to 4 directory levels; the store still uses a flat name.
-  `add` says so if nothing is found within that limit.
+  not copied. Skills are only those with `SKILL.md` in a root folder,
+  `skills/<name>`, or `skills/<category>/<name>`. The store is flat by name;
+  `list` / `add` group by category. `add` names these layouts if it finds none.
 - Real directories in the store are unmanaged: sync skips them, remove
   refuses them, doctor tells you to move them into a source and `add` it.
 

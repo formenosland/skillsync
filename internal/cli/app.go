@@ -511,7 +511,7 @@ func (a *App) pickMulti(prompt string, items []string) []string {
 }
 
 type installCand struct {
-	name, dir, kind, occ string
+	name, dir, kind, occ, cat string
 }
 
 func (a *App) pickInstall(prompt string, cands []installCand) []string {
@@ -528,7 +528,14 @@ func (a *App) pickInstall(prompt string, cands []installCand) []string {
 		return out
 	}
 	fmt.Fprintln(a.Stderr, a.ui.bold+prompt+a.ui.reset)
+	prevCat := "\x00"
 	for i, c := range cands {
+		if c.cat != prevCat {
+			if c.cat != "" {
+				fmt.Fprintln(a.Stderr, "  "+a.ui.bold+c.cat+a.ui.reset)
+			}
+			prevCat = c.cat
+		}
 		mark := a.ui.dim + "[ ]" + a.ui.reset
 		tag := "override  " + c.occ
 		if c.kind == "new" {
@@ -632,18 +639,19 @@ func (a *App) sourceIndex() [][2]string {
 	return idx
 }
 
-func (a *App) skillGroup(entry string, idx [][2]string) string {
+func (a *App) skillPlace(entry string, idx [][2]string) (group, category string) {
 	if fsops.IsRealDir(entry) {
-		return "unmanaged"
+		return "unmanaged", ""
 	}
 	if fsops.IsSymlink(entry) && !destExists(entry) {
-		return "(broken)"
+		return "(broken)", ""
 	}
 	t, err := fsops.ResolveDir(entry)
 	if err != nil {
-		return "(broken)"
+		return "(broken)", ""
 	}
 	best := ""
+	bestRoot := ""
 	bestLen := -1
 	for _, row := range idx {
 		root := row[0]
@@ -651,13 +659,19 @@ func (a *App) skillGroup(entry string, idx [][2]string) string {
 			if len(root) >= bestLen {
 				bestLen = len(root)
 				best = row[1]
+				bestRoot = root
 			}
 		}
 	}
 	if best == "" {
-		return a.compactHome(t)
+		return a.compactHome(t), ""
 	}
-	return best
+	return best, skill.Category(bestRoot, t)
+}
+
+func (a *App) skillGroup(entry string, idx [][2]string) string {
+	g, _ := a.skillPlace(entry, idx)
+	return g
 }
 
 func (a *App) listNames() []string {
