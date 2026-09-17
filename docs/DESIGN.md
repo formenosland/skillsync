@@ -149,14 +149,14 @@ Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud l
 
 | Command | Semantics |
 |---------|-----------|
-| `init` | Create store; for each installed agent: migrate real skills to `sources/local/`, register that path, back up the folder, replace it with a view symlink. Idempotent. Interactive agent selection on a tty; non-interactive init requires global `--yes`. |
-| `add` | Register a source, fetch it, pick names to symlink. TTY checkbox (overrides explicit). `--yes` installs unique names only. Unchecked unique names go to `excludes` in `skillsyncrc`. Non-TTY without `--yes` refuses. |
+| `init` | Create store; for each installed agent: migrate real skills to `sources/local/`, register that path, back up the folder, replace it with a view symlink. Idempotent. Interactive agent checkbox on a tty; non-interactive init requires global `--yes`. |
+| `add` | Register a source, fetch it, pick names to symlink. TTY checkbox (arrows/space/enter; overrides explicit). `--yes` installs unique names only. Unchecked unique names go to `excludes` in `skillsyncrc`. Non-TTY without `--yes` refuses. |
 | `sync` | Pull all git sources, fill vacant names, prune broken links. Never steal occupied names. If `skillsync.toml` is found walking up from cwd, also materialize that project. |
 | `apply` | Fetch project sources (optional `ref`), link allowlisted names into `.agents/skills` and `[views]` paths, rewrite managed gitignore blocks. Non-interactive requires `--yes`. |
 | `apply --global` | Same, then install those names into the home store and register git/path sources in `skillsyncrc`. Occupied home names are skipped (warn). |
 | `apply --prune` | Remove project symlinks whose names left the manifest. |
 | `unapply [names…]` | Remove skillsync-managed project symlinks (all, or named). Does not touch the home store. |
-| `remove` | Delete the skill's store symlink (visible everywhere instantly) and record the name in `excludes` so sync won't restore it. No backups — source files are never touched, so nothing is lost. Refuses unmanaged entries. Bare `remove` on a tty opens a picker; without names, non-interactive use requires skill arguments or `--all` (`skillsync --yes remove --all` removes everything). |
+| `remove` | Delete the skill's store symlink (visible everywhere instantly) and record the name in `excludes` so sync won't restore it. No backups — source files are never touched, so nothing is lost. Refuses unmanaged entries. Bare `remove` on a tty opens a checkbox picker; without names, non-interactive use requires skill arguments or `--all` (`skillsync --yes remove --all` removes everything). |
 | `remove --all` | Remove every skill currently in the store (same per-skill semantics as `remove <name>`). |
 | `remove --source` | Drop the manifest entry, delete the clone (managed clones only — local folders are kept), remove its store links, re-materialize. |
 | `list` | On a tty: skills grouped by source, with the first line of each `description`. Piped / `--names` (`-1`): plain names for scripts and completion. `--pretty` forces the catalog when stdout is not a tty. |

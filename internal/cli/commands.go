@@ -59,8 +59,12 @@ func (a *App) cmdInit(args []string) error {
 		for _, c := range cands {
 			lines = append(lines, c.ids+"  ->  "+c.path)
 		}
+		picked, err := a.pickMulti("link these agent skill folders to the store?", lines)
+		if err != nil {
+			return err
+		}
 		sel := map[string]struct{}{}
-		for _, s := range a.pickMulti("link these agent skill folders to the store?", lines) {
+		for _, s := range picked {
 			sel[s] = struct{}{}
 		}
 		migratedAny := false
@@ -168,8 +172,12 @@ func (a *App) cmdAdd(args []string) error {
 			}
 		}
 	}
+	chosen, err := a.pickInstall("install skills from this source?", cands)
+	if err != nil {
+		return err
+	}
 	sel := map[string]struct{}{}
-	for _, n := range a.pickInstall("install skills from this source?", cands) {
+	for _, n := range chosen {
 		sel[n] = struct{}{}
 	}
 	for _, c := range cands {
@@ -348,7 +356,10 @@ func (a *App) cmdRemove(args []string) error {
 	if all {
 		names = a.listNames()
 	} else if len(names) == 0 {
-		picked := a.pickMulti("remove which skills?", a.listNames())
+		picked, err := a.pickMulti("remove which skills?", a.listNames())
+		if err != nil {
+			return err
+		}
 		if len(picked) == 0 {
 			return fmt.Errorf("specify skill names or use --all (non-interactive)")
 		}

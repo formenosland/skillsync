@@ -78,7 +78,7 @@ skillsync sync                    # pull git sources, refresh vacant names
 
 `init` detects installed agents, moves any existing per-agent skills into `sources/local/` (then registers that path), and replaces each agent's skills folder with a symlink to the store. Anything replaced is backed up first (`~/.local/share/skillsync/backups/`).
 
-On a TTY, `add` shows a checkbox list: new names on by default; names already in the store are marked `override` with the current occupant. Checking an override replaces that symlink. `--yes` installs unique names only and warns on conflicts.
+On a TTY, `add` (and `init` / bare `remove`) uses an arrow-key checkbox list: space toggles, `a`/`n` all/none, enter accepts, `q` aborts. New names start on; names already in the store are `override` (off until checked). Checking an override replaces that symlink. `--yes` installs unique names only and warns on conflicts.
 
 ## Commands
 

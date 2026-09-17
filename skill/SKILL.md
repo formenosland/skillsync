@@ -23,7 +23,7 @@ skill files — only links.
 ## When to use
 
 - **New machine** — install the CLI, then `init` once.
-- **Add a repo or folder** — `add` then pick names (TTY) or `--yes` for uniques.
+- **Add a repo or folder** — `add` then pick names (TTY: arrows/space/enter) or `--yes` for uniques.
 - **Repo skills** — `apply` from a directory that has `skillsync.toml`.
 - **Drop a skill everywhere** — `remove <name>` (or bare `remove` for a picker).
 - **Something broken** — `doctor` finds drifted views and broken links.
@@ -43,7 +43,7 @@ From a checkout: `make` then run `./bin/skillsync init` (or `make install` onto 
 
 ```sh
 skillsync --yes init                 # non-interactive init (link all candidates)
-skillsync init                       # bootstrap: migrate + link agents (picker on tty)
+skillsync init                       # bootstrap: migrate + link agents (checkbox on tty)
 skillsync --yes add acme-corp/skills # unique names only; warn on collisions
 skillsync add ~/dev/my-skills        # local folder as a pointer
 skillsync sync                       # pull sources, fill vacant names; also apply if skillsync.toml is present
@@ -52,7 +52,7 @@ skillsync --yes apply --prune        # drop project links that left the manifest
 skillsync --yes apply --global       # also install those names into the home store
 skillsync unapply                    # remove managed project links (not the home store)
 skillsync remove terse               # gone from every agent, instantly
-skillsync remove                     # interactive picker (tty, no args)
+skillsync remove                     # interactive checkbox picker (tty, no args)
 skillsync --yes remove --all         # remove every installed skill (scripts)
 skillsync remove --source ~/dev/my-skills
 skillsync list                       # catalog on a tty; names when piped
@@ -67,8 +67,9 @@ skillsync uninstall --purge          # type nuke to confirm; --yes skips prompts
 Global flags work before or after the subcommand: `skillsync --dry-run sync`,
 `skillsync init --yes`. Flags: `--dry-run` (preview), `--yes` / `-y` (no
 prompts), `--copy` (no-symlink filesystems). Without a TTY, `init`/`add` need
-`--yes`; bare `remove` needs skill names or `--all`. Occupied store names are
-not replaced unless the user checks override on `add`. Store skill names
+`--yes`; bare `remove` needs skill names or `--all`. On a TTY, pickers use
+arrows, space, and enter. Occupied store names are not replaced unless the
+user checks override on `add`. Store skill names
 follow the Agent Skills `name` rules: `^[a-z0-9]+(-[a-z0-9]+)*$`, max 64 chars.
 
 ## Key semantics

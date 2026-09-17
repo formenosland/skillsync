@@ -12,7 +12,7 @@ func (a *App) cmdHelp() {
   init                        Create store, migrate per-agent skills, link views
                               (non-interactive: skillsync --yes init)
   add <url|path>              Register a skill source; pick names to install
-                              (root folders or skills/<name> or skills/<category>/<name>)
+                              (tty: arrows/space/enter; or --yes for uniques)
   apply                       Install/update repo skills from skillsync.toml
                               (non-interactive: skillsync --yes apply)
   apply --global              Also install those names into the home store
@@ -20,7 +20,7 @@ func (a *App) cmdHelp() {
   unapply [names...]          Remove skillsync-managed project links
   sync                        Pull all sources, refresh the store
                               (also apply if skillsync.toml is present)
-  remove [names...] (rm)      Remove skills everywhere (picker when tty, no args)
+  remove [names...] (rm)      Remove skills everywhere (checkbox picker when tty)
   remove --all                Remove every installed skill
   remove --source <url|path>  Unregister a source and its skills
   list (ls)                   Skills grouped by source and category (tty); names when piped
