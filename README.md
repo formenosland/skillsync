@@ -85,7 +85,7 @@ On a TTY, `add` shows a checkbox list: new names on by default; names already in
 | Command | Description |
 |---------|-------------|
 | `init` | Create the store, migrate per-agent skills, link agent views |
-| `add <url\|path>` | Register a git repo or local folder; pick which skill names to install |
+| `add <url\|path>` | Register a git repo or local folder; pick names (`SKILL.md` within 4 directory levels) |
 | `sync` | Pull all git sources; fill vacant names; never steal occupied names. Also `apply` if `skillsync.toml` is found |
 | `apply` | Install/update repo skills from `skillsync.toml` (`--global`, `--prune`) |
 | `unapply [names…]` | Remove skillsync-managed project links (home store untouched) |
@@ -210,6 +210,8 @@ After `skillsync init`, agent folders are views into the store, so `npx skills a
 ## FAQ
 
 **What if an agent recreates its skills folder as a real directory?** `skillsync doctor` flags it as a drifted view; `skillsync init` heals it (migrating any new skills it finds).
+
+**Can a source nest skills under category folders?** Yes, up to **4 directory levels** below the source root (for example `skills/engineering/foo` in [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills)). Deeper trees are ignored. Agent views stay one level deep by skill `name`. If `add` finds nothing, it says so and mentions that 4-depth limit.
 
 **Windows?** Directory views use a symlink when the OS allows it, otherwise a junction. `--copy` remains for filesystems without links.
 

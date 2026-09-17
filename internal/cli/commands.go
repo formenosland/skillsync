@@ -147,7 +147,7 @@ func (a *App) cmdAdd(args []string) error {
 		cands = append(cands, c)
 	}
 	if len(cands) == 0 {
-		a.info("no skills found in source")
+		a.info(fmt.Sprintf("no skills found in source (within the %d-depth limit)", skill.MaxFindDepth))
 		a.end("add done " + a.ui.dim + fmt.Sprintf("(%d ok, %d warnings)", a.nOK, a.nWarn) + a.ui.reset)
 		return nil
 	}

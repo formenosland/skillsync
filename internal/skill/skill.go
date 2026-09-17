@@ -1,6 +1,7 @@
 package skill
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -8,6 +9,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
+
+// MaxFindDepth is how many directory levels below a source root we walk for SKILL.md.
+const MaxFindDepth = 4
 
 var nameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
@@ -126,57 +130,45 @@ func extractFM(b []byte) map[string]any {
 	return m
 }
 
+func skipFindDir(name string) bool {
+	switch name {
+	case ".git", "node_modules":
+		return true
+	}
+	return strings.HasPrefix(name, ".")
+}
+
 func FindInSource(root string) []Found {
 	var out []Found
-	seen := map[string]struct{}{}
-	add := func(dir string) {
-		if _, err := os.Stat(filepath.Join(dir, "SKILL.md")); err != nil {
-			return
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
 		}
-		n := NameFromDir(dir)
-		if n == "" {
-			return
+		if !d.IsDir() {
+			return nil
 		}
-		key := dir
-		if _, ok := seen[key]; ok {
-			return
+		if path != root && skipFindDir(d.Name()) {
+			return filepath.SkipDir
 		}
-		seen[key] = struct{}{}
-		out = append(out, Found{Dir: dir, Name: n})
-	}
-	skills := filepath.Join(root, "skills")
-	if st, err := os.Stat(skills); err == nil && st.IsDir() {
-		ents, _ := os.ReadDir(skills)
-		for _, e := range ents {
-			if !e.IsDir() {
-				continue
-			}
-			add(filepath.Join(skills, e.Name()))
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return nil
 		}
-	}
-	ents, err := os.ReadDir(root)
-	if err != nil {
-		return out
-	}
-	for _, e := range ents {
-		if !e.IsDir() {
-			continue
+		depth := 0
+		if rel != "." {
+			depth = strings.Count(rel, string(filepath.Separator)) + 1
 		}
-		if e.Name() == "skills" || e.Name() == ".git" {
-			continue
+		if depth > MaxFindDepth {
+			return filepath.SkipDir
 		}
-		d := filepath.Join(root, e.Name())
-		if _, err := os.Stat(filepath.Join(d, "SKILL.md")); err == nil {
-			add(d)
-			continue
+		if _, err := os.Stat(filepath.Join(path, "SKILL.md")); err != nil {
+			return nil
 		}
-		ents2, _ := os.ReadDir(d)
-		for _, e2 := range ents2 {
-			if !e2.IsDir() {
-				continue
-			}
-			add(filepath.Join(d, e2.Name()))
+		n := NameFromDir(path)
+		if n != "" {
+			out = append(out, Found{Dir: path, Name: n})
 		}
-	}
+		return filepath.SkipDir
+	})
 	return out
 }

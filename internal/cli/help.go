@@ -12,7 +12,7 @@ func (a *App) cmdHelp() {
   init                        Create store, migrate per-agent skills, link views
                               (non-interactive: skillsync --yes init)
   add <url|path>              Register a skill source; pick names to install
-                              (non-interactive: skillsync --yes add <source>)
+                              (SKILL.md within 4 directory levels; --yes skips picker)
   apply                       Install/update repo skills from skillsync.toml
                               (non-interactive: skillsync --yes apply)
   apply --global              Also install those names into the home store

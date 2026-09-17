@@ -211,6 +211,29 @@ func TestAddOccupancyAndList(t *testing.T) {
 		t.Fatalf("names: %s", out)
 	}
 
+	srcDeep := filepath.Join(s.root, "src-deep")
+	makeSkill(t, filepath.Join(srcDeep, "skills", "engineering", "verify"), "verify")
+	if _, e, c := s.yes("add", srcDeep); c != 0 {
+		t.Fatal(e)
+	}
+	if !isLinkOrView(filepath.Join(store, "verify")) {
+		t.Fatal("nested category skill not linked")
+	}
+	empty := filepath.Join(s.root, "src-empty")
+	if err := os.MkdirAll(empty, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, errb, code = s.yes("add", empty)
+	if code != 0 {
+		t.Fatal(errb)
+	}
+	if code != 0 {
+		t.Fatal(errb)
+	}
+	if !strings.Contains(errb, "no skills found in source (within the 4-depth limit)") {
+		t.Fatalf("empty add: %s", errb)
+	}
+
 	out, _, _ = s.yes("status")
 	if strings.Contains(out, "test skill alpha") {
 		t.Fatalf("status should not reprint the catalog: %s", out)
