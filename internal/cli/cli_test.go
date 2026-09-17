@@ -486,3 +486,158 @@ func TestCopyMode(t *testing.T) {
 		t.Fatal("copy missing files")
 	}
 }
+
+func writeManifest(t *testing.T, repo, body string) {
+	t.Helper()
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "skillsync.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func chdir(t *testing.T, dir string) {
+	t.Helper()
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+}
+
+func TestApplyProjectLinksAndGitignore(t *testing.T) {
+	s := newSandbox(t)
+	repo := filepath.Join(s.root, "repo")
+	makeSkill(t, filepath.Join(repo, "vendor-skills", "foo"), "foo")
+	makeSkill(t, filepath.Join(repo, "vendor-skills", "bar"), "bar")
+	writeManifest(t, repo, `[skills]
+sources = [{ url = "./vendor-skills", skills = ["foo", "bar"] }]
+[views]
+ids = ["fake-claude"]
+`)
+	chdir(t, repo)
+	if _, e, c := s.yes("apply"); c != 0 {
+		t.Fatalf("apply: %s", e)
+	}
+	for _, view := range []string{
+		filepath.Join(repo, ".agents", "skills"),
+		filepath.Join(repo, ".claude", "skills"),
+	} {
+		for _, n := range []string{"foo", "bar"} {
+			p := filepath.Join(view, n)
+			fi, err := os.Lstat(p)
+			if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+				t.Fatalf("%s not a symlink: %v", p, err)
+			}
+		}
+		gi, err := os.ReadFile(filepath.Join(view, ".gitignore"))
+		if err != nil || !strings.Contains(string(gi), "foo") {
+			t.Fatalf("gitignore %s: %s %v", view, gi, err)
+		}
+	}
+}
+
+func TestApplyCollisionHardFail(t *testing.T) {
+	s := newSandbox(t)
+	repo := filepath.Join(s.root, "repo")
+	makeSkill(t, filepath.Join(repo, "vendor-skills", "foo"), "foo")
+	makeSkill(t, filepath.Join(repo, ".agents", "skills", "foo"), "foo")
+	writeManifest(t, repo, `[skills]
+sources = [{ url = "./vendor-skills", skills = ["foo"] }]
+`)
+	chdir(t, repo)
+	_, e, c := s.yes("apply")
+	if c == 0 || !strings.Contains(e, "collision") {
+		t.Fatalf("want collision, code %d err %s", c, e)
+	}
+}
+
+func TestApplyUnknownViewID(t *testing.T) {
+	s := newSandbox(t)
+	repo := filepath.Join(s.root, "repo")
+	makeSkill(t, filepath.Join(repo, "vendor-skills", "foo"), "foo")
+	writeManifest(t, repo, `[skills]
+sources = [{ url = "./vendor-skills", skills = ["foo"] }]
+[views]
+ids = ["not-an-agent"]
+`)
+	chdir(t, repo)
+	_, e, c := s.yes("apply")
+	if c == 0 || !strings.Contains(e, "unknown view id") {
+		t.Fatalf("code %d err %s", c, e)
+	}
+}
+
+func TestApplyPathDedupeAndUnapply(t *testing.T) {
+	s := newSandbox(t)
+	repo := filepath.Join(s.root, "repo")
+	makeSkill(t, filepath.Join(repo, "vendor-skills", "foo"), "foo")
+	writeManifest(t, repo, `[skills]
+sources = [{ url = "./vendor-skills", skills = ["*"] }]
+[views]
+ids = ["fake-codex"]
+`)
+	chdir(t, repo)
+	if _, e, c := s.yes("apply"); c != 0 {
+		t.Fatalf("apply: %s", e)
+	}
+	if _, err := os.Lstat(filepath.Join(repo, ".agents", "skills", "foo")); err != nil {
+		t.Fatal(err)
+	}
+	if _, e, c := s.yes("unapply", "foo"); c != 0 {
+		t.Fatalf("unapply: %s", e)
+	}
+	if _, err := os.Lstat(filepath.Join(repo, ".agents", "skills", "foo")); !os.IsNotExist(err) {
+		t.Fatal("link should be gone")
+	}
+}
+
+func TestApplyPruneAndGlobal(t *testing.T) {
+	s := newSandbox(t)
+	s.yes("init")
+	repo := filepath.Join(s.root, "repo")
+	makeSkill(t, filepath.Join(repo, "vendor-skills", "foo"), "foo")
+	makeSkill(t, filepath.Join(repo, "vendor-skills", "bar"), "bar")
+	writeManifest(t, repo, `[skills]
+sources = [{ url = "./vendor-skills", skills = ["foo", "bar"] }]
+`)
+	chdir(t, repo)
+	if _, e, c := s.yes("apply"); c != 0 {
+		t.Fatalf("apply: %s", e)
+	}
+	writeManifest(t, repo, `[skills]
+sources = [{ url = "./vendor-skills", skills = ["foo"] }]
+`)
+	if _, e, c := s.yes("apply", "--prune"); c != 0 {
+		t.Fatalf("prune: %s", e)
+	}
+	if _, err := os.Lstat(filepath.Join(repo, ".agents", "skills", "bar")); !os.IsNotExist(err) {
+		t.Fatal("bar should be pruned")
+	}
+	if _, e, c := s.yes("apply", "--global"); c != 0 {
+		t.Fatalf("global: %s", e)
+	}
+	if _, err := os.Lstat(filepath.Join(s.sync, "store", "foo")); err != nil {
+		t.Fatal("home store missing foo")
+	}
+}
+
+func TestApplyDryRun(t *testing.T) {
+	s := newSandbox(t)
+	repo := filepath.Join(s.root, "repo")
+	makeSkill(t, filepath.Join(repo, "vendor-skills", "foo"), "foo")
+	writeManifest(t, repo, `[skills]
+sources = [{ url = "./vendor-skills", skills = ["foo"] }]
+`)
+	chdir(t, repo)
+	if _, e, c := s.run("--dry-run", "--yes", "apply"); c != 0 {
+		t.Fatalf("%s", e)
+	}
+	if _, err := os.Lstat(filepath.Join(repo, ".agents", "skills", "foo")); !os.IsNotExist(err) {
+		t.Fatal("dry-run wrote a link")
+	}
+}

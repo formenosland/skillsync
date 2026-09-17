@@ -60,7 +60,7 @@ skillsync applies the Stow pattern: one canonical store, many symlinks.
 
 **Ownership invariant** — *skillsync owns the store; humans own sources.* The store contains only symlinks created by skillsync. A real directory found in the store is unmanaged: `sync` skips it, `remove` refuses it, `doctor` flags it with advice to move it into a source. skillsync never deletes skill files — only links.
 
-**Occupancy** — a store name is occupied or vacant. `add` does not replace an occupant unless the user checks that row (override). `--yes add` installs unique names only and warns. `sync` never steals an occupied name. A vacant name with two or more providers is left unlinked (warn). Project skills (`.agents/skills/` in a repo) are outside home-scope sync; agents resolve them nearest-first themselves.
+**Occupancy** — a store name is occupied or vacant. `add` does not replace an occupant unless the user checks that row (override). `--yes add` installs unique names only and warns. `sync` never steals an occupied name. A vacant name with two or more providers is left unlinked (warn). In a repo, `apply` links selected names under `.agents/skills/` (and extra `[views]` paths); an unmanaged occupant there is a hard failure. Agents resolve project vs global nearest-first.
 
 ### 3.2 Locations (XDG)
 
@@ -88,6 +88,28 @@ excludes = ["old-skill"]
 - Git sources are cloned to `~/.local/share/skillsync/sources/<host>/<owner>/<repo>/` (scheme and trailing `.git` stripped; `..` segments rejected). `owner/repo` shorthand is GitHub HTTPS. Local paths are referenced in place (no copy).
 - `init` may evacuate real agent-folder skills into `sources/local/` and **register that path in `skillsyncrc`** like any other path source. It is not an implicit extra source.
 
+### 3.3a Project manifest
+
+File: `<repo>/skillsync.toml` (walk up from cwd). Unknown keys are rejected.
+
+```toml
+[skills]
+sources = [
+  { url = "https://github.com/acme/skills", ref = "v1.2.0", skills = ["foo", "bar"] },
+  { url = "./vendor-skills", skills = ["*"] },
+]
+
+[views]
+ids = ["claude-code", "codex"]
+```
+
+- `[skills].sources` is the allowlist (`ref` optional; omit `skills` or use `"*"` for all names). Git URLs clone into the same XDG `sources/` tree. Paths must be relative to the repo (no absolute/`~` paths).
+- Always own `.agents/skills`. `[views].ids` are registry agent ids; we also own each id’s `project_path` (deduped). Do not list `.claude` itself — only the skills subdir from the registry.
+- `apply` creates **flat** per-skill symlinks (`<view>/<name>` → clone). A real directory or foreign link in that slot is a conflict and apply stops. A generated `.gitignore` block lists managed names so Git stays clean; first-party skill dirs are not listed.
+- `apply --global` also installs those names into the home store (occupancy same as `add --yes`). `remove` is home-store only; `unapply` drops project links.
+
+Skills under a skills root stay one level deep (`<root>/<name>/SKILL.md`). Nested namespace folders are not used (many clients, including Zed, scan one level).
+
 ### 3.4 Skill discovery
 
 Within each source, skill directories (containing `SKILL.md`) are found at depth 1, depth 2, and under a `skills/` container. The store name comes from the `name:` frontmatter field, falling back to the directory basename. Names must match the [Agent Skills](https://agentskills.io/specification) `name` rules: 1–64 characters, `/^[a-z0-9]+(-[a-z0-9]+)*$/` (lowercase, digits, single hyphens; no leading/trailing/consecutive hyphens). Unsafe names are skipped during materialize/migration and refused by `remove`.
@@ -114,6 +136,7 @@ Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud l
 | `sync`, vacant, two+ providers | Leave vacant; warn |
 | Occupied store name | Never retargeted by `sync` |
 | Unmanaged real directory in store | Never touched; flagged by doctor |
+| Project apply vs first-party dir | Hard-fail (every colliding view+name) |
 | Project skill vs global skill | Agent resolves nearest scope itself |
 
 ## 4. Operations
@@ -122,13 +145,17 @@ Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud l
 |---------|-----------|
 | `init` | Create store; for each installed agent: migrate real skills to `sources/local/`, register that path, back up the folder, replace it with a view symlink. Idempotent. Interactive agent selection on a tty; non-interactive init requires global `--yes`. |
 | `add` | Register a source, fetch it, pick names to symlink. TTY checkbox (overrides explicit). `--yes` installs unique names only. Unchecked unique names go to `excludes` in `skillsyncrc`. Non-TTY without `--yes` refuses. |
-| `sync` | Pull all git sources, fill vacant names, prune broken links. Never steal occupied names. |
+| `sync` | Pull all git sources, fill vacant names, prune broken links. Never steal occupied names. If `skillsync.toml` is found walking up from cwd, also materialize that project. |
+| `apply` | Fetch project sources (optional `ref`), link allowlisted names into `.agents/skills` and `[views]` paths, rewrite managed gitignore blocks. Non-interactive requires `--yes`. |
+| `apply --global` | Same, then install those names into the home store and register git/path sources in `skillsyncrc`. Occupied home names are skipped (warn). |
+| `apply --prune` | Remove project symlinks whose names left the manifest. |
+| `unapply [names…]` | Remove skillsync-managed project symlinks (all, or named). Does not touch the home store. |
 | `remove` | Delete the skill's store symlink (visible everywhere instantly) and record the name in `excludes` so sync won't restore it. No backups — source files are never touched, so nothing is lost. Refuses unmanaged entries. Bare `remove` on a tty opens a picker; without names, non-interactive use requires skill arguments or `--all` (`skillsync --yes remove --all` removes everything). |
 | `remove --all` | Remove every skill currently in the store (same per-skill semantics as `remove <name>`). |
 | `remove --source` | Drop the manifest entry, delete the clone (managed clones only — local folders are kept), remove its store links, re-materialize. |
 | `list` | On a tty: skills grouped by source, with the first line of each `description`. Piped / `--names` (`-1`): plain names for scripts and completion. `--pretty` forces the catalog when stdout is not a tty. |
 | `status` | Dashboard: version, store/config paths, skill and source counts, source health vs last fetched origin (`up to date` / `behind` / `ahead` / `diverged` / `local` / `missing`; path sources: `path`). No network. Not a skill catalog (`list` is). |
-| `doctor` | Broken links, drifted views (agent recreated a real folder), wrong links, missing sources, unlinked installed agents. Exit 1 on actionable findings. |
+| `doctor` | Broken links, drifted views, wrong links, missing sources, unlinked installed agents, project apply drift/collisions. Exit 1 on actionable findings. |
 | `uninstall` | Reverse of init: remove all view symlinks (default), or convert views to real copies (`--keep`). `--purge` deletes all skillsync data after typing the confirmation word `nuke`; global `--yes` skips that prompt. |
 
 **Global options** (before or after the subcommand): `--dry-run`, `--yes` / `-y`, `--copy`. Examples: `skillsync --dry-run remove foo`, `skillsync remove foo --dry-run`, `skillsync init --yes`.
@@ -169,7 +196,7 @@ Removing the tool (`brew uninstall skillsync`, or deleting the `go install` bina
 
 ## 7. Pinning and Updates
 
-- Git sources: `sync` fetches and updates clones (HTTPS via go-git). Pin by checking out a tag/commit in the clone; skillsync does not rewrite HEADs.
+- Git sources: `sync` fetches and updates clones (HTTPS via go-git). Pin by checking out a tag/commit in the clone; home `sync` does not rewrite HEADs. Project `apply` honors per-source `ref` in `skillsync.toml`.
 - Local paths: always live.
 - Registry: pinned upstream commit, explicit regeneration.
 - Future: optional `sources.lock` with commit SHAs (out of scope for v0).
@@ -188,15 +215,14 @@ Removing the tool (`brew uninstall skillsync`, or deleting the `go install` bina
 |-------|-------|
 | Marketplace / registry hosting | [skills.sh](https://skills.sh) and similar serve discovery |
 | Skill format changes | Governed by agentskills.io / AAIF |
-| Project-scope sync | Managed by the repo (git, submodules, copies) |
+| Nested skill namespaces under a skills root | Clients typically scan one level (`<root>/<name>/SKILL.md`) |
 | Windows directory links | Symlink when allowed; junction fallback; `--copy` for non-NTFS |
 | Cloud-library vendors | No filesystem surface (e.g. Perplexity Computer) |
 
 ## 10. Open Questions
 
 1. Should `sources.lock` be standardized in v1?
-2. Should project-scope `.agents/skillsyncrc` be supported for team repos?
-3. Should `remove` of a `sources/local/` skill offer to delete the files too (currently: never)?
+2. Should `remove` of a `sources/local/` skill offer to delete the files too (currently: never)?
 
 ## 11. References
 

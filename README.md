@@ -86,7 +86,9 @@ On a TTY, `add` shows a checkbox list: new names on by default; names already in
 |---------|-------------|
 | `init` | Create the store, migrate per-agent skills, link agent views |
 | `add <url\|path>` | Register a git repo or local folder; pick which skill names to install |
-| `sync` | Pull all git sources; fill vacant names; never steal occupied names |
+| `sync` | Pull all git sources; fill vacant names; never steal occupied names. Also `apply` if `skillsync.toml` is found |
+| `apply` | Install/update repo skills from `skillsync.toml` (`--global`, `--prune`) |
+| `unapply [names…]` | Remove skillsync-managed project links (home store untouched) |
 | `remove [names...]` (`rm`) | Remove skills from everywhere; bare `remove` opens an interactive picker |
 | `remove --all` | Remove every installed skill (use `skillsync --yes remove --all` in scripts) |
 | `remove --source <url\|path>` | Unregister a source and drop its skills |
@@ -96,7 +98,7 @@ On a TTY, `add` shows a checkbox list: new names on by default; names already in
 | `uninstall [--keep] [--purge]` (`nuke`) | Reverse `init` (see below) |
 | `completion bash\|zsh` | Shell completion (`skillsync remove <TAB>` completes skills) |
 
-**Global flags** (before or after the subcommand): `--dry-run` (preview everything), `--yes` / `-y` (skip prompts; non-interactive init/add/remove), `--copy` (filesystems without symlinks).
+**Global flags** (before or after the subcommand): `--dry-run` (preview everything), `--yes` / `-y` (skip prompts; non-interactive init/add/remove/apply), `--copy` (filesystems without symlinks).
 
 ```sh
 skillsync --yes init
@@ -142,6 +144,30 @@ eval "$(skillsync completion zsh)"    # ~/.zshrc
 2. **Views** — each agent's global skills dir is a symlink to the store.
 3. **Sources** — git URLs cloned under `sources/<host>/<owner>/<repo>/`; local folders referenced in place. Occupied names are not replaced unless you check override on `add`.
 4. **`skillsyncrc`** — TOML list of git URLs or absolute paths, plus `excludes` and optional `[[agents]]`.
+5. **Repo `skillsync.toml`** — team allowlist. `apply` links those names under `.agents/skills/` (and extra `[views]` agent `project_path`s). Managed names are gitignored; first-party skill dirs stay yours.
+
+### Project skills
+
+Commit `skillsync.toml` at the repo root:
+
+```toml
+[skills]
+sources = [
+  { url = "https://github.com/acme/skills", ref = "v1.2.0", skills = ["foo", "bar"] },
+]
+
+[views]
+ids = ["claude-code"]   # optional extra folders (.claude/skills); .agents/skills is always used
+```
+
+```sh
+skillsync --yes apply              # install/update project links
+skillsync --yes apply --prune      # drop names that left the file
+skillsync --yes apply --global     # also put those names in your home store
+skillsync unapply foo              # remove project links only
+```
+
+A first-party skill occupying the same name in that folder is a conflict: apply stops. `sync` from inside the repo also refreshes project links. `remove` still only affects the home store.
 
 Everything lives in XDG paths (no new dotfolder in your home):
 
@@ -170,7 +196,7 @@ Agent missing or path wrong? Add an `[[agents]]` table to `skillsyncrc` (fields 
 | Agent coverage | ~75 filesystem agents | same ecosystem (overlapping path list) |
 | Layout | one canonical store; each agent's **skills directory** is a view (Stow) | install **into each chosen agent directory** (per-skill symlink or copy) |
 | Name collisions | occupant stays; `add` override is explicit | project directory vs `-g` global |
-| Project skills (`.agents/skills/` in a repo) | not managed — the repo owns them | default install scope |
+| Project skills | `skillsync.toml` + `apply` (gitignored links in `.agents/skills`) | default: copy into the project and typically commit |
 | Discovery / marketplace | out of scope ([skills.sh](https://skills.sh) if you want it) | `skills find`, skills.sh |
 | Use without installing | — | `skills use` (temp files + prompt) |
 | Author a skill template | — | `skills init` |

@@ -107,3 +107,12 @@ func Views(rows []Row) []View {
 func IDList(ids []string) string {
 	return strings.Join(ids, " ")
 }
+
+func RowByID(rows []Row, id string) (Row, bool) {
+	for _, r := range rows {
+		if r.ID == id {
+			return r, true
+		}
+	}
+	return Row{}, false
+}

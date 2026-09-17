@@ -24,7 +24,7 @@ skill files — only links.
 
 - **New machine** — install the CLI, then `init` once.
 - **Add a repo or folder** — `add` then pick names (TTY) or `--yes` for uniques.
-- **Skills stale** — `sync` pulls git sources and fills vacant names.
+- **Repo skills** — `apply` from a directory that has `skillsync.toml`.
 - **Drop a skill everywhere** — `remove <name>` (or bare `remove` for a picker).
 - **Something broken** — `doctor` finds drifted views and broken links.
 - **Leaving** — `uninstall` (clean reverse of init), `--purge` to erase all data.
@@ -46,7 +46,11 @@ skillsync --yes init                 # non-interactive init (link all candidates
 skillsync init                       # bootstrap: migrate + link agents (picker on tty)
 skillsync --yes add acme-corp/skills # unique names only; warn on collisions
 skillsync add ~/dev/my-skills        # local folder as a pointer
-skillsync sync                       # pull sources, fill vacant names
+skillsync sync                       # pull sources, fill vacant names; also apply if skillsync.toml is present
+skillsync --yes apply                # install/update project links from skillsync.toml
+skillsync --yes apply --prune        # drop project links that left the manifest
+skillsync --yes apply --global       # also install those names into the home store
+skillsync unapply                    # remove managed project links (not the home store)
 skillsync remove terse               # gone from every agent, instantly
 skillsync remove                     # interactive picker (tty, no args)
 skillsync --yes remove --all         # remove every installed skill (scripts)
@@ -106,8 +110,10 @@ Exit code 1 only for **actionable** errors (broken links, drifted/wrong/not-link
   else is non-destructive to skill files.
 - Registry gaps: add `[[agents]]` tables to `skillsyncrc`
   (`id`, `display_name`, `global_path`, `project_path`).
-- Project scope (`.agents/skills/` in a repo) is the repo's business,
-  not skillsync's.
+- Project skills: commit `skillsync.toml` (`[skills].sources`, optional
+  `[views].ids`). `apply` links into `.agents/skills/` (flat names) and
+  extra harness `project_path`s. First-party occupants collide and stop
+  apply. `unapply` does not call `remove`.
 
 ## Environment
 

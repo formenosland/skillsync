@@ -87,6 +87,10 @@ func (a *App) run() error {
 		return a.cmdAdd(args)
 	case "sync":
 		return a.cmdSync(args)
+	case "apply":
+		return a.cmdApply(args)
+	case "unapply":
+		return a.cmdUnapply(args)
 	case "remove", "rm":
 		return a.cmdRemove(args)
 	case "list", "ls":

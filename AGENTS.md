@@ -28,7 +28,7 @@ make install         # go install ./cmd/skillsync
 3. **`internal/agentregistry/agents.tsv` is generated** — never hand-edit. Regenerate with `make agentregistry` or `make agentregistry SHA=<upstream-sha>`; extend `prefixes` in `internal/agentregistry/gen/parse.go` if upstream adds a path token. Embedded next to `Load` (`//go:embed` is package-relative).
 4. Keep behavior **`--dry-run`-able** and **`--yes`-able** (automation first).
 5. **Docs travel with behavior:** same change updates `README.md`, `docs/DESIGN.md`, and `skill/SKILL.md` when semantics change. Do not invent git tags — [cocogitto](https://docs.cocogitto.io/) (`cog.toml`) owns version bumps. Version string lives in `internal/cli/app.go` (`Version`).
-6. **Config is one file:** `${XDG_CONFIG_HOME:-$HOME/.config}/skillsyncrc` (TOML), or `$SKILLSYNC_HOME/skillsyncrc`. No `sources.conf`, `exclude.conf`, `config.toml`, or `agents.local.tsv`.
+6. **Config files:** user `${XDG_CONFIG_HOME:-$HOME/.config}/skillsyncrc` (TOML), or `$SKILLSYNC_HOME/skillsyncrc`. Optional repo `skillsync.toml` (different schema: `[skills].sources` tables + `[views].ids`). No `sources.conf`, `exclude.conf`, `config.toml`, or `agents.local.tsv`.
 
 ## Boundaries
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/formenosland/skillsync/internal/paths"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 )
 
 func IsGitURL(s string) bool {
@@ -114,4 +115,36 @@ func CloneOrPull(sourcesDir, raw string) error {
 		URL: remote,
 	})
 	return err
+}
+
+// CheckoutRef checks out a branch, tag, or commit in an existing clone.
+func CheckoutRef(cloneDir, ref string) error {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil
+	}
+	r, err := git.PlainOpen(cloneDir)
+	if err != nil {
+		return err
+	}
+	w, err := r.Worktree()
+	if err != nil {
+		return err
+	}
+	if plumbing.IsHash(ref) {
+		err = w.Checkout(&git.CheckoutOptions{Hash: plumbing.NewHash(ref)})
+		if err == nil {
+			return nil
+		}
+	}
+	for _, n := range []plumbing.ReferenceName{
+		plumbing.NewBranchReferenceName(ref),
+		plumbing.NewTagReferenceName(ref),
+		plumbing.NewRemoteReferenceName("origin", ref),
+	} {
+		if err := w.Checkout(&git.CheckoutOptions{Branch: n, Force: true}); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("checkout %s: ref %q not found", cloneDir, ref)
 }

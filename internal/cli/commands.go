@@ -203,6 +203,9 @@ func (a *App) cmdSync(args []string) error {
 	if err := a.materialize(); err != nil {
 		return err
 	}
+	if err := a.applyProjectIfPresent(); err != nil {
+		return err
+	}
 	a.end("sync done " + a.ui.dim + fmt.Sprintf("(%d ok, %d warnings)", a.nOK, a.nWarn) + a.ui.reset)
 	return nil
 }
@@ -529,6 +532,7 @@ func (a *App) cmdDoctor(args []string) error {
 			a.warn("source missing on disk: " + src + "  (run sync or add)")
 		}
 	}
+	issues += a.doctorProject()
 	if issues > 0 {
 		a.end(a.ui.red + fmt.Sprintf("%d issue(s) found", issues) + a.ui.reset)
 		return errQuiet
