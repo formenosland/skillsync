@@ -17,10 +17,7 @@ func IsGitURL(s string) bool {
 	case strings.HasPrefix(s, "http://"), strings.HasPrefix(s, "https://"),
 		strings.HasPrefix(s, "git@"), strings.HasPrefix(s, "ssh://"):
 		return true
-	case filepath.IsAbs(s), s == "~", strings.HasPrefix(s, "~/"),
-		strings.HasPrefix(s, "./"), strings.HasPrefix(s, "../"):
-		return false
-	case len(s) >= 2 && s[1] == ':': // Windows drive
+	case paths.LooksLikeLocalPath(s):
 		return false
 	case strings.Contains(s, "/"):
 		return true

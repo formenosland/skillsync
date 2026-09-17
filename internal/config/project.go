@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/formenosland/skillsync/internal/paths"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -56,11 +57,8 @@ func (p Project) Validate() error {
 		if u == "" {
 			return fmt.Errorf("skills.sources[%d]: empty url", i)
 		}
-		if filepath.IsAbs(u) || (len(u) >= 2 && u[1] == ':') {
+		if forbiddenAbsSource(u) {
 			return fmt.Errorf("skills.sources[%d]: absolute path not allowed (use a git URL or a path relative to the repo)", i)
-		}
-		if strings.HasPrefix(u, "~") {
-			return fmt.Errorf("skills.sources[%d]: home-relative path not allowed", i)
 		}
 		all := len(s.Skills) == 0
 		for _, n := range s.Skills {
@@ -83,6 +81,16 @@ func (p Project) Validate() error {
 		}
 	}
 	return nil
+}
+
+func forbiddenAbsSource(u string) bool {
+	if strings.HasPrefix(u, "~") {
+		return true
+	}
+	if strings.HasPrefix(u, "./") || strings.HasPrefix(u, "../") {
+		return false
+	}
+	return paths.LooksLikeLocalPath(u) && !strings.HasPrefix(u, ".")
 }
 
 // FindManifest walks from start toward filesystem root looking for skillsync.toml.

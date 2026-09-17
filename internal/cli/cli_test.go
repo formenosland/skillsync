@@ -125,7 +125,7 @@ func TestInitMigrateAndViews(t *testing.T) {
 		t.Fatal("store link missing")
 	}
 	rc, err := os.ReadFile(filepath.Join(s.sync, "skillsyncrc"))
-	if err != nil || !bytes.Contains(rc, []byte("sources/local")) {
+	if err != nil || !strings.Contains(filepath.ToSlash(string(rc)), "sources/local") {
 		t.Fatalf("skillsyncrc should register local: %s %v", rc, err)
 	}
 	if _, err := os.Stat(filepath.Join(claude, "oldskill", "SKILL.md")); err != nil {

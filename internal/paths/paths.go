@@ -123,6 +123,23 @@ func dirExists(p string) bool {
 	return err == nil && st.IsDir()
 }
 
+// LooksLikeLocalPath reports filesystem paths, including POSIX-absolute
+// forms that filepath.IsAbs does not treat as absolute on Windows.
+func LooksLikeLocalPath(s string) bool {
+	switch {
+	case filepath.IsAbs(s), s == "~", strings.HasPrefix(s, "~/"):
+		return true
+	case strings.HasPrefix(s, "./"), strings.HasPrefix(s, "../"):
+		return true
+	case strings.HasPrefix(s, "/"), strings.HasPrefix(s, `\`):
+		return true
+	case len(s) >= 2 && s[1] == ':':
+		return true
+	default:
+		return false
+	}
+}
+
 func HasDotDotSegment(p string) bool {
 	p = strings.ReplaceAll(p, `\`, "/")
 	for _, seg := range strings.Split(p, "/") {

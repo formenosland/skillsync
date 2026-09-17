@@ -31,6 +31,21 @@ func TestXDGConfigFile(t *testing.T) {
 	}
 }
 
+func TestLooksLikeLocalPath(t *testing.T) {
+	if !LooksLikeLocalPath("/tmp/foo") {
+		t.Fatal("posix abs")
+	}
+	if !LooksLikeLocalPath(`C:\skills`) {
+		t.Fatal("windows drive")
+	}
+	if !LooksLikeLocalPath("./vendor-skills") {
+		t.Fatal("dot relative")
+	}
+	if LooksLikeLocalPath("acme/skills") {
+		t.Fatal("github shorthand")
+	}
+}
+
 func TestHasDotDot(t *testing.T) {
 	if !HasDotDotSegment("github.com/foo/../../../tmp") {
 		t.Fatal("expected dotdot")
