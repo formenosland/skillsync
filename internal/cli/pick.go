@@ -383,7 +383,7 @@ func (a *App) pickSkills(prompt string) ([]string, error) {
 	}
 	var skills []pickItem
 	for _, r := range a.catalogRows() {
-		skills = append(skills, pickItem{label: r.name, value: r.name, group: r.group, cat: r.cat, on: true})
+		skills = append(skills, pickItem{label: r.name, value: r.name, group: r.group, cat: r.cat, hint: r.blurb, on: true})
 	}
 	p := nestPick(prompt, skills)
 	if err := a.runPick(p); err != nil {
@@ -433,6 +433,9 @@ func installItem(c installCand) pickItem {
 		it.hint = "new"
 	default:
 		it.hint = "override  " + c.occ
+	}
+	if c.blurb != "" {
+		it.hint += "  " + c.blurb
 	}
 	return it
 }

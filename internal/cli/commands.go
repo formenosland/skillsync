@@ -142,7 +142,7 @@ func (a *App) cmdAdd(args []string) error {
 	idx := a.sourceIndex()
 	var cands []installCand
 	for _, f := range skill.FindInSource(root) {
-		c := installCand{name: f.Name, dir: f.Dir, kind: "new", cat: f.Category}
+		c := installCand{name: f.Name, dir: f.Dir, kind: "new", cat: f.Category, blurb: skill.Shorten(skill.Blurb(f.Dir), a.ui.fancy)}
 		dest := filepath.Join(a.layout.Store, f.Name)
 		if a.storeOccupied(f.Name) {
 			if fsops.PathsEqual(dest, f.Dir) {

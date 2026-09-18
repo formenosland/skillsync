@@ -109,9 +109,9 @@ func TestPickToggleCategory(t *testing.T) {
 
 func TestPickInstallDefaults(t *testing.T) {
 	p := installPickList([]installCand{
-		{name: "keep", kind: "new", cat: "tools"},
+		{name: "keep", kind: "new", cat: "tools", blurb: "Keep skill description"},
 		{name: "clash", kind: "override", occ: "local", cat: "tools"},
-		{name: "other", kind: "new", cat: "web"},
+		{name: "other", kind: "new", cat: "web", blurb: "Other skill description"},
 	})
 	if got := strings.Join(p.selected(), " "); got != "keep other" {
 		t.Fatalf("defaults %q", got)
@@ -122,6 +122,9 @@ func TestPickInstallDefaults(t *testing.T) {
 	}
 	if !strings.Contains(body, "override  local") || !strings.Contains(body, "new") {
 		t.Fatalf("hints: %s", body)
+	}
+	if !strings.Contains(body, "Keep skill description") || !strings.Contains(body, "Other skill description") {
+		t.Fatalf("blurbs: %s", body)
 	}
 }
 

@@ -43,7 +43,7 @@ Agent views
   linked     ~/.agents/skills        cline dexto warp zed …
 ```
 
-The store only ever contains symlinks created by skillsync. Your skill files stay in git repos or folders you control — skillsync never deletes them. `skillsync --version` prints the installed version.
+The store only ever contains symlinks created by skillsync. Your skill files stay in git repos or folders you control — skillsync never deletes them.
 
 Zero extra runtime tools: one static binary (git clone/pull via the library).
 
@@ -76,50 +76,43 @@ skillsync add ~/dev/my-skills     # local folder (pointer, not a copy)
 skillsync sync                    # pull git sources, refresh vacant names
 ```
 
-`init` detects installed agents, moves any existing per-agent skills into `sources/local/` (then registers that path), and replaces each agent's skills folder with a symlink to the store. Anything replaced is backed up first (`~/.local/share/skillsync/backups/`).
-
-On a TTY, `add` (and `init` / bare `remove`) uses an arrow-key checkbox list: space toggles a skill, a category, or a source group; `a`/`n` all/none; enter accepts; `q` aborts. `add` and `remove` group by occupying source and `skills/<category>` (same derivation as `list`). New names start on; names already linked from this source are shown as installed (not togglable); names already in the store from another source are `override` (off until checked). If every skill from the source is already linked, `add` says so and skips the picker. Checking an override replaces that symlink. `--yes` installs unique names only and warns on conflicts.
+`init` migrates per-agent skills into `sources/local/` and replaces each agent's skills folder with a symlink to the store (originals go under `backups/`).
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
 | `init` | Create the store, migrate per-agent skills, link agent views |
-| `add <url\|path>` | Register a git repo or local folder; pick names (`SKILL.md` in root folders, `skills/<name>`, or `skills/<category>/<name>`) |
-| `sync` | Pull all git sources; fill vacant names; never steal occupied names. Also `apply` if `skillsync.toml` is found |
+| `add <url\|path>` | Register a git repo or local folder; pick which skills to install |
+| `sync` | Pull git sources; fill vacant names. Also `apply` if `skillsync.toml` is found |
 | `apply` | Install/update repo skills from `skillsync.toml` (`--global`, `--prune`) |
 | `unapply [names…]` | Remove skillsync-managed project links (home store untouched) |
-| `remove [names...]` (`rm`) | Remove skills from everywhere; bare `remove` opens a picker grouped like `list` |
-| `remove --all` | Remove every installed skill (use `skillsync --yes remove --all` in scripts) |
+| `remove [names...]` (`rm`) | Unlink skills from the store (every agent); bare `remove` picks |
+| `remove --all` | Remove every installed skill |
 | `remove --source <url\|path>` | Unregister a source and drop its skills |
-| `list` (`ls`) | Catalog grouped by source and `skills/<category>` (tty); one name per line when piped. `--pretty` / `--names` (`-1`) force either form |
-| `status` | Dashboard: paths, counts, source health vs last fetch, agent views, excludes |
-| `doctor` | Diagnose broken links, drifted views, missing links (exit 1 on actionable findings; warnings alone do not fail) |
+| `list` (`ls`) | Installed skills (grouped on a tty; names when piped) |
+| `status` | Paths, source health, agent views |
+| `doctor` | Broken links, drifted views |
 | `uninstall [--keep] [--purge]` (`nuke`) | Reverse `init` (see below) |
 | `completion bash\|zsh` | Shell completion (`skillsync remove <TAB>` completes skills) |
 
-**Global flags** (before or after the subcommand): `--dry-run` (preview everything), `--yes` / `-y` (skip prompts; non-interactive init/add/remove/apply), `--copy` (filesystems without symlinks).
+**Global flags** (before or after the subcommand): `--dry-run`, `--yes` / `-y`, `--copy`.
 
 ```sh
-skillsync --yes init
-skillsync init --yes
-skillsync --yes add acme-corp/skills
 skillsync --dry-run remove foo
 skillsync remove foo --dry-run
 ```
 
-Non-interactive: `skillsync init --yes` when agents need linking; `skillsync --yes add <source>`; `skillsync remove foo` or `skillsync remove --all --yes` (bare `remove` with no TTY needs names or `--all`).
-
-`remove` drops the skill from the store — and therefore every agent — immediately. Source files are never touched. The name is recorded in `skillsyncrc` (`excludes`) so `sync` won't resurrect it; re-`add` the source (or edit the file) to bring it back. Names you uncheck on `add` (new names only) are excluded the same way.
+`remove` unlinks a store name immediately. Source files stay. The name is recorded in `skillsyncrc` (`excludes`) so `sync` will not restore it.
 
 ### Two kinds of uninstall
 
 | Command | Removes |
 |---------|---------|
-| `skillsync uninstall` | Agent view symlinks only (clean reverse of `init`); add `--keep` to leave real copies in each agent folder, `--purge` to also delete store, sources, and config (type `nuke` to confirm; `skillsync --yes uninstall --purge` skips prompts) |
-| `brew uninstall skillsync` | The Homebrew keg only — never your skill data |
+| `skillsync uninstall` | View symlinks (`--keep` copies, `--purge` wipes data; type `nuke`) |
+| `brew uninstall skillsync` | The keg, not skill data |
 
-A `go install` binary is just a file on `PATH` (`$(go env GOPATH)/bin/skillsync` unless `GOBIN` is set); delete it to remove the tool. If you previously used the old curl `install.sh`, remove `~/.local/bin/skillsync` and `~/.local/share/skillsync/app/` — that copy is unused now and is not skill data.
+A `go install` binary is just a file on `PATH`. Leftover from the old curl `install.sh`: `~/.local/bin/skillsync` and `~/.local/share/skillsync/app/`.
 
 ### Shell completion
 
@@ -142,7 +135,7 @@ eval "$(skillsync completion zsh)"    # ~/.zshrc
 
 1. **Store** — one symlink per *installed* skill name, pointing into a source. Agent views are a single symlink to this directory.
 2. **Views** — each agent's global skills dir is a symlink to the store.
-3. **Sources** — git URLs cloned under `sources/<host>/<owner>/<repo>/`; local folders referenced in place. Occupied names are not replaced unless you check override on `add`.
+3. **Sources** — git URLs cloned under `sources/<host>/<owner>/<repo>/`; local folders referenced in place. Occupied names are not replaced by default.
 4. **`skillsyncrc`** — TOML list of git URLs or absolute paths, plus `excludes` and optional `[[agents]]`.
 5. **Repo `skillsync.toml`** — team allowlist. `apply` links those names under `.agents/skills/` (and extra `[views]` agent `project_path`s). Managed names are gitignored; first-party skill dirs stay yours.
 
@@ -181,7 +174,7 @@ Everything lives in XDG paths (no new dotfolder in your home):
 
 ## Supported agents
 
-[`internal/agentregistry/agents.tsv`](internal/agentregistry/agents.tsv) covers ~75 agents — Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, OpenCode, Zed, Cline, Warp, Goose, Windsurf, Kiro, Junie, Amp, Hermes, OpenClaw, and more. It is **generated, never hand-edited** (see [Contributing](CONTRIBUTING.md) to refresh it). Paths may use env-overridable homes (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`, …) and `|` fallback chains (OpenClaw's `~/.openclaw` → `~/.clawdbot` → `~/.moltbot`). `init` only links agents that are actually installed — it never litters your home directory.
+[`internal/agentregistry/agents.tsv`](internal/agentregistry/agents.tsv) covers ~75 agents — Claude Code, Cursor, Codex, Gemini CLI, GitHub Copilot, OpenCode, Zed, Cline, Warp, Goose, Windsurf, Kiro, Junie, Amp, Hermes, OpenClaw, and more. It is **generated, never hand-edited** (see [Contributing](CONTRIBUTING.md) to refresh it). Paths may use env-overridable homes (`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `HERMES_HOME`, …) and `|` fallback chains (OpenClaw's `~/.openclaw` → `~/.clawdbot` → `~/.moltbot`). `init` only links agents that are actually installed.
 
 Agent missing or path wrong? Add an `[[agents]]` table to `skillsyncrc` (fields `id`, `display_name`, `global_path`, `project_path`; wins by `id`) — and please open an issue or PR.
 
@@ -217,11 +210,11 @@ After `skillsync init`, agent folders are views into the store, so `npx skills a
 2. `skills/<name>/SKILL.md`
 3. `skills/<category>/<name>/SKILL.md` — e.g. [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills)
 
-Nothing else is collected (no `docs/…`, no deeper trees). The store and agent views stay flat by skill `name`. `list` and the `add`/`remove` pickers group names under those category folders. If `add` finds nothing, it names these layouts.
+Nothing else is collected. The store stays flat by skill `name`.
 
-**Windows?** Directory views use a symlink when the OS allows it, otherwise a junction. `--copy` remains for filesystems without links.
+**Windows?** Directory views use a symlink when possible, otherwise a junction. `--copy` for filesystems without links.
 
-**Is output scriptable?** Yes: colors and symbols degrade automatically when piped (or with `NO_COLOR`/`TERM=dumb`), `list` emits plain names when piped (or with `--names`), global `--yes` skips confirmations (including the `nuke` typed confirm for `--purge`), and `doctor` exits 1 only for actionable problems (broken links, drifted/wrong/missing views)—not for informational warnings such as missing clones.
+**Scripts?** Piped `list` is names only; `--yes` skips prompts; `doctor` exits 1 only on actionable problems.
 
 ## Documentation
 
