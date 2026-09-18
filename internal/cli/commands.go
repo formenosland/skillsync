@@ -144,9 +144,13 @@ func (a *App) cmdAdd(args []string) error {
 	for _, f := range skill.FindInSource(root) {
 		c := installCand{name: f.Name, dir: f.Dir, kind: "new", cat: f.Category}
 		dest := filepath.Join(a.layout.Store, f.Name)
-		if a.storeOccupied(f.Name) && !fsops.PathsEqual(dest, f.Dir) {
-			c.kind = "override"
-			c.occ = a.skillGroup(dest, idx)
+		if a.storeOccupied(f.Name) {
+			if fsops.PathsEqual(dest, f.Dir) {
+				c.kind = "have"
+			} else {
+				c.kind = "override"
+				c.occ = a.occupantLabel(dest, idx)
+			}
 		}
 		cands = append(cands, c)
 	}
@@ -158,6 +162,11 @@ func (a *App) cmdAdd(args []string) error {
 	})
 	if len(cands) == 0 {
 		a.info("no skills found in source (" + skill.FindHint + ")")
+		a.end("add done " + a.ui.dim + fmt.Sprintf("(%d ok, %d warnings)", a.nOK, a.nWarn) + a.ui.reset)
+		return nil
+	}
+	if !installPickable(cands) {
+		a.info("all skills from this source are already installed")
 		a.end("add done " + a.ui.dim + fmt.Sprintf("(%d ok, %d warnings)", a.nOK, a.nWarn) + a.ui.reset)
 		return nil
 	}
@@ -381,8 +390,7 @@ func (a *App) cmdRemove(args []string) error {
 			continue
 		}
 		if !skill.IsSafeName(n) {
-			a.err("'" + n + "': unsafe skill name, not removing")
-			continue
+			return a.unknownRemove(n)
 		}
 		dest := filepath.Join(a.layout.Store, n)
 		if fsops.IsRealDir(dest) {
@@ -390,8 +398,7 @@ func (a *App) cmdRemove(args []string) error {
 			continue
 		}
 		if !fsops.IsSymlink(dest) && !fsops.Exists(dest) {
-			a.warn("'" + n + "': not installed")
-			continue
+			return a.unknownRemove(n)
 		}
 		if err := a.do("rm "+dest, func() error { return os.Remove(dest) }); err != nil {
 			return err
@@ -404,6 +411,15 @@ func (a *App) cmdRemove(args []string) error {
 	}
 	a.end("remove done " + a.ui.dim + fmt.Sprintf("(%d removed, %d warnings)", a.nOK, a.nWarn) + a.ui.reset)
 	return nil
+}
+
+func (a *App) unknownRemove(n string) error {
+	a.err("unknown skill '" + n + "'")
+	if strings.Contains(n, "/") || gitx.IsGitURL(n) {
+		a.info("to drop a source: skillsync remove --source " + n)
+	}
+	a.helpRemove()
+	return errQuiet
 }
 
 func (a *App) removeSource(s string) error {

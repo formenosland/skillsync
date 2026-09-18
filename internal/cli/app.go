@@ -549,15 +549,28 @@ func (a *App) sourceIndex() [][2]string {
 }
 
 func (a *App) skillPlace(entry string, idx [][2]string) (group, category string) {
+	g, cat, _ := a.skillLocate(entry, idx)
+	return g, cat
+}
+
+func (a *App) occupantLabel(entry string, idx [][2]string) string {
+	g, _, rel := a.skillLocate(entry, idx)
+	if rel != "" && rel != "." {
+		return g + "/" + rel
+	}
+	return g
+}
+
+func (a *App) skillLocate(entry string, idx [][2]string) (group, category, rel string) {
 	if fsops.IsRealDir(entry) {
-		return "unmanaged", ""
+		return "unmanaged", "", ""
 	}
 	if fsops.IsSymlink(entry) && !destExists(entry) {
-		return "(broken)", ""
+		return "(broken)", "", ""
 	}
 	t, err := fsops.ResolveDir(entry)
 	if err != nil {
-		return "(broken)", ""
+		return "(broken)", "", ""
 	}
 	best := ""
 	bestRoot := ""
@@ -573,14 +586,15 @@ func (a *App) skillPlace(entry string, idx [][2]string) (group, category string)
 		}
 	}
 	if best == "" {
-		return a.compactHome(t), ""
+		return a.compactHome(t), "", ""
 	}
-	return best, skill.Category(bestRoot, t)
-}
-
-func (a *App) skillGroup(entry string, idx [][2]string) string {
-	g, _ := a.skillPlace(entry, idx)
-	return g
+	rel, err = filepath.Rel(bestRoot, t)
+	if err != nil {
+		rel = ""
+	} else {
+		rel = filepath.ToSlash(rel)
+	}
+	return best, skill.Category(bestRoot, t), rel
 }
 
 func (a *App) listNames() []string {

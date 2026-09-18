@@ -23,7 +23,7 @@ skill files — only links.
 ## When to use
 
 - **New machine** — install the CLI, then `init` once.
-- **Add a repo or folder** — `add` then pick names (TTY: arrows/space/enter) or `--yes` for uniques.
+- **Add a repo or folder** — `add` then pick names (TTY: arrows/space/enter) or `--yes` for uniques. Re-`add` the same source to install names that were skipped or appeared after a sync.
 - **Repo skills** — `apply` from a directory that has `skillsync.toml`.
 - **Drop a skill everywhere** — `remove <name>` (or bare `remove` for a picker).
 - **Something broken** — `doctor` finds drifted views and broken links.
@@ -68,7 +68,7 @@ Global flags work before or after the subcommand: `skillsync --dry-run sync`,
 `skillsync init --yes`. Flags: `--dry-run` (preview), `--yes` / `-y` (no
 prompts), `--copy` (no-symlink filesystems). Without a TTY, `init`/`add` need
 `--yes`; bare `remove` needs skill names or `--all`. On a TTY, pickers use
-arrows, space, and enter. Occupied store names are not replaced unless the
+arrows, space, and enter (space on a category toggles that whole group). Occupied store names are not replaced unless the
 user checks override on `add`. Store skill names
 follow the Agent Skills `name` rules: `^[a-z0-9]+(-[a-z0-9]+)*$`, max 64 chars.
 

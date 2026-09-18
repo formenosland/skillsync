@@ -116,7 +116,7 @@ Sources are scanned for **exactly** these layouts (dot-directories at the source
 
 1. **Root export** — `SKILL.md` in the source root, or `<name>/SKILL.md` as an immediate child.
 2. **`skills/` folder** — `skills/<name>/SKILL.md`.
-3. **Categorized `skills/`** — `skills/<category>/<name>/SKILL.md` (for example [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills)). `list`, the `add` picker, and the `remove` picker group by `<category>` (and by occupying source).
+3. **Categorized `skills/`** — `skills/<category>/<name>/SKILL.md` (for example [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills)). `list`, the `add` picker, and the `remove` picker group by `<category>` (and by occupying source). Picker space on a category or source row toggles every skill in that group.
 
 No other paths are skills (not `docs/…`, not `skills/<category>/<name>/…` deeper). The store and agent views stay **flat** (`<root>/<name>/SKILL.md`). The store name comes from the `name:` frontmatter field, falling back to the directory basename. If `add` finds no skills, it reports that and lists these layouts. Names must match the [Agent Skills](https://agentskills.io/specification) `name` rules: 1–64 characters, `/^[a-z0-9]+(-[a-z0-9]+)*$/` (lowercase, digits, single hyphens; no leading/trailing/consecutive hyphens). Unsafe names are skipped during materialize/migration and refused by `remove`.
 
@@ -150,7 +150,7 @@ Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud l
 | Command | Semantics |
 |---------|-----------|
 | `init` | Create store; for each installed agent: migrate real skills to `sources/local/`, register that path, back up the folder, replace it with a view symlink. Idempotent. Interactive agent checkbox on a tty; non-interactive init requires global `--yes`. |
-| `add` | Register a source, fetch it, pick names to symlink. TTY checkbox (arrows/space/enter; overrides explicit). `--yes` installs unique names only. Unchecked unique names go to `excludes` in `skillsyncrc`. Non-TTY without `--yes` refuses. |
+| `add` | Register a source, fetch it, pick names to symlink. TTY checkbox (arrows/space/enter; already-linked names from this source are locked; overrides explicit). Re-`add` the same source to pick names that appeared later (or were skipped). If nothing is left to install, skip the picker. `--yes` installs unique names only. Unchecked unique names go to `excludes` in `skillsyncrc`. Non-TTY without `--yes` refuses. |
 | `sync` | Pull all git sources, fill vacant names, prune broken links. Never steal occupied names. If `skillsync.toml` is found walking up from cwd, also materialize that project. |
 | `apply` | Fetch project sources (optional `ref`), link allowlisted names into `.agents/skills` and `[views]` paths, rewrite managed gitignore blocks. Non-interactive requires `--yes`. |
 | `apply --global` | Same, then install those names into the home store and register git/path sources in `skillsyncrc`. Occupied home names are skipped (warn). |

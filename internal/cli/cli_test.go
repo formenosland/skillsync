@@ -153,6 +153,23 @@ func TestAddOccupancyAndList(t *testing.T) {
 	if _, e, c := s.yes("add", srcOrg); c != 0 {
 		t.Fatal(e)
 	}
+	_, errb, code := s.yes("add", srcOrg)
+	if code != 0 {
+		t.Fatal(errb)
+	}
+	if !strings.Contains(errb, "all skills from this source are already installed") {
+		t.Fatalf("re-add: %s", errb)
+	}
+	if strings.Contains(errb, "excluded") {
+		t.Fatalf("re-add excluded: %s", errb)
+	}
+	makeSkill(t, filepath.Join(srcOrg, "skills", "delta"), "delta")
+	if _, e, c := s.yes("add", srcOrg); c != 0 {
+		t.Fatal(e)
+	}
+	if !isLinkOrView(filepath.Join(s.sync, "store", "delta")) {
+		t.Fatal("new skill after re-add")
+	}
 	if _, e, c := s.yes("add", srcUser); c != 0 {
 		t.Fatal(e)
 	}
@@ -172,11 +189,11 @@ func TestAddOccupancyAndList(t *testing.T) {
 	if !strings.Contains(tgt, "src-org") {
 		t.Fatal("not a pointer")
 	}
-	_, errb, _ := s.yes("add", srcUser)
+	_, errb, _ = s.yes("add", srcUser)
 	if !strings.Contains(errb, "already installed") {
 		t.Fatalf("want conflict warn: %s", errb)
 	}
-	_, errb, code := s.run("add", srcUser)
+	_, errb, code = s.run("add", srcUser)
 	if code == 0 || !strings.Contains(errb, "non-interactive add requires --yes") {
 		t.Fatalf("code %d %s", code, errb)
 	}
@@ -403,7 +420,7 @@ func TestSecurityAndFlags(t *testing.T) {
 	os.MkdirAll(filepath.Join(s.root, "outside-decoy"), 0o755)
 	os.WriteFile(filepath.Join(s.root, "outside-decoy", "marker"), []byte("x"), 0o644)
 	_, errb, _ := s.run("remove", "../../../evil")
-	if !strings.Contains(errb, "unsafe skill name") {
+	if !strings.Contains(errb, "unknown skill") || !strings.Contains(errb, "Usage:") {
 		t.Fatalf("%s", errb)
 	}
 	if _, err := os.Stat(filepath.Join(s.root, "outside-decoy", "marker")); err != nil {

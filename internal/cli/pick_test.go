@@ -74,20 +74,36 @@ func TestPickApply(t *testing.T) {
 }
 
 func TestPickGroupAndCategory(t *testing.T) {
-	p := &pickList{
-		prompt: "remove?",
-		items: []pickItem{
-			{label: "alpha", value: "alpha", group: "src-a", cat: "tools", on: true},
-			{label: "beta", value: "beta", group: "src-a", cat: "web", on: true},
-			{label: "gamma", value: "gamma", group: "src-b", cat: "", on: true},
-		},
-	}
+	p := nestPick("remove?", []pickItem{
+		{label: "alpha", value: "alpha", group: "src-a", cat: "tools", on: true},
+		{label: "beta", value: "beta", group: "src-a", cat: "web", on: true},
+		{label: "gamma", value: "gamma", group: "src-b", cat: "", on: true},
+	})
 	body := strings.Join(p.lines(style{}), "\n")
 	if !strings.Contains(body, "src-a") || !strings.Contains(body, "src-b") {
 		t.Fatalf("groups: %s", body)
 	}
 	if !strings.Contains(body, "tools") || !strings.Contains(body, "web") {
 		t.Fatalf("categories: %s", body)
+	}
+}
+
+func TestPickToggleCategory(t *testing.T) {
+	p := nestPick("install?", []pickItem{
+		{label: "keep", value: "keep", cat: "tools", on: true},
+		{label: "clash", value: "clash", cat: "tools", on: false},
+		{label: "other", value: "other", cat: "web", on: true},
+	})
+	if p.items[0].kind != rowCat || p.items[0].label != "tools" {
+		t.Fatalf("header %+v", p.items[0])
+	}
+	p.apply(keyToggle)
+	if got := strings.Join(p.selected(), " "); got != "keep clash other" {
+		t.Fatalf("all tools on: %q", got)
+	}
+	p.apply(keyToggle)
+	if got := strings.Join(p.selected(), " "); got != "other" {
+		t.Fatalf("tools off: %q", got)
 	}
 }
 
@@ -109,15 +125,38 @@ func TestPickInstallDefaults(t *testing.T) {
 	}
 }
 
-func installPickList(cands []installCand) *pickList {
-	p := &pickList{prompt: "install?"}
-	for _, c := range cands {
-		it := pickItem{label: c.name, value: c.name, cat: c.cat, hint: "override  " + c.occ}
-		if c.kind == "new" {
-			it.on = true
-			it.hint = "new"
-		}
-		p.items = append(p.items, it)
+func TestPickLockedInstalled(t *testing.T) {
+	p := installPickList([]installCand{
+		{name: "keep", kind: "have", cat: "tools"},
+		{name: "more", kind: "new", cat: "tools"},
+	})
+	if p.items[0].kind != rowCat {
+		t.Fatalf("header: %+v", p.items[0])
 	}
-	return p
+	p.apply(keyDown)
+	if p.items[p.cursor].value != "more" {
+		t.Fatalf("skip locked, cursor %+v", p.items[p.cursor])
+	}
+	p.cursor = 1
+	p.apply(keyToggle)
+	if !p.items[1].on || !p.items[1].locked {
+		t.Fatal("locked flipped")
+	}
+	if got := strings.Join(p.selected(), " "); got != "more" {
+		t.Fatalf("selected %q", got)
+	}
+	if !installPickable([]installCand{{kind: "have"}, {kind: "new"}}) {
+		t.Fatal("pickable")
+	}
+	if installPickable([]installCand{{kind: "have"}}) {
+		t.Fatal("all have")
+	}
+}
+
+func installPickList(cands []installCand) *pickList {
+	var skills []pickItem
+	for _, c := range cands {
+		skills = append(skills, installItem(c))
+	}
+	return nestPick("install?", skills)
 }

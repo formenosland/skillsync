@@ -12,7 +12,7 @@ func (a *App) cmdHelp() {
   init                        Create store, migrate per-agent skills, link views
                               (non-interactive: skillsync --yes init)
   add <url|path>              Register a skill source; pick names to install
-                              (tty: arrows/space/enter; or --yes for uniques)
+                              (tty: arrows/space/enter, space toggles a category)
   apply                       Install/update repo skills from skillsync.toml
                               (non-interactive: skillsync --yes apply)
   apply --global              Also install those names into the home store
@@ -46,6 +46,16 @@ func (a *App) cmdHelp() {
   XDG_DATA_HOME        Data:   $XDG_DATA_HOME/skillsync (~/.local/share/skillsync)
   NO_COLOR             Disable colors and symbols
 `, a.ui.bold, a.ui.reset, Version, a.ui.bold, a.ui.reset, a.ui.bold, a.ui.reset, a.ui.bold, a.ui.reset, a.ui.bold, a.ui.reset)
+}
+
+func (a *App) helpRemove() {
+	fmt.Fprintf(a.Stderr, `
+%sUsage:%s
+  skillsync remove [names...]     Remove named skills (picker on tty if none)
+  skillsync remove --all          Remove every installed skill
+  skillsync remove --source <url|path>
+                                  Unregister a source and its skills
+`, a.ui.bold, a.ui.reset)
 }
 
 func (a *App) cmdCompletion(args []string) error {
