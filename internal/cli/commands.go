@@ -124,7 +124,6 @@ func (a *App) cmdAdd(args []string) error {
 	if err != nil {
 		return err
 	}
-	a.header("skillsync add " + entry)
 	if err := a.fetchSource(source); err != nil {
 		if gitx.IsGitURL(source) && !strings.Contains(err.Error(), "unsafe") {
 			return fmt.Errorf("could not fetch source: %w", err)
@@ -142,7 +141,7 @@ func (a *App) cmdAdd(args []string) error {
 	idx := a.sourceIndex()
 	var cands []installCand
 	for _, f := range skill.FindInSource(root) {
-		c := installCand{name: f.Name, dir: f.Dir, kind: "new", cat: f.Category, blurb: skill.Shorten(skill.Blurb(f.Dir), a.ui.fancy)}
+		c := installCand{name: f.Name, dir: f.Dir, kind: "new", cat: f.Category, invoke: skill.Invocation(f.Dir), blurb: skill.Shorten(skill.Blurb(f.Dir), a.ui.fancy)}
 		dest := filepath.Join(a.layout.Store, f.Name)
 		if a.storeOccupied(f.Name) {
 			if fsops.PathsEqual(dest, f.Dir) {
@@ -259,7 +258,7 @@ func (a *App) cmdList(args []string) error {
 }
 
 type catalogRow struct {
-	name, group, cat, blurb string
+	name, group, cat, invoke, blurb string
 }
 
 func (a *App) catalogRows() []catalogRow {
@@ -270,7 +269,8 @@ func (a *App) catalogRows() []catalogRow {
 		group, cat := a.skillPlace(e, idx)
 		rows = append(rows, catalogRow{
 			name: n, group: group, cat: cat,
-			blurb: skill.Shorten(skill.Blurb(e), a.ui.fancy),
+			invoke: skill.Invocation(e),
+			blurb:  skill.Shorten(skill.Blurb(e), a.ui.fancy),
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -296,9 +296,13 @@ func (a *App) listPretty() {
 		return
 	}
 	w := 12
+	flagW := 0
 	for _, r := range rows {
 		if len(r.name) > w {
 			w = len(r.name)
+		}
+		if n := len(r.invoke); n > flagW {
+			flagW = n
 		}
 	}
 	if w > 32 {
@@ -330,8 +334,15 @@ func (a *App) listPretty() {
 			pad = 1
 		}
 		spaces := strings.Repeat(" ", pad)
+		tail := ""
+		if flagW > 0 {
+			tail += "  " + padRight(r.invoke, flagW)
+		}
 		if r.blurb != "" {
-			fmt.Fprintf(a.Stdout, "%s%s%s%s%s  %s%s%s\n", indent, lc.bold, r.name, lc.reset, spaces, lc.dim, r.blurb, lc.reset)
+			tail += "  " + r.blurb
+		}
+		if tail != "" {
+			fmt.Fprintf(a.Stdout, "%s%s%s%s%s%s%s%s\n", indent, lc.bold, r.name, lc.reset, spaces, lc.dim, tail, lc.reset)
 		} else {
 			fmt.Fprintf(a.Stdout, "%s%s%s%s\n", indent, lc.bold, r.name, lc.reset)
 		}

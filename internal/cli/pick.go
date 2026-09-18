@@ -4,10 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/term"
 )
+
+const occPrefix = "occupied by "
 
 var errPickAbort = errors.New("selection cancelled")
 
@@ -35,9 +38,9 @@ const (
 )
 
 type pickItem struct {
-	kind                           rowKind
-	label, hint, group, cat, value string
-	on, locked                     bool
+	kind                                                rowKind
+	label, hint, invoke, status, occ, group, cat, value string
+	on, locked                                          bool
 }
 
 type pickList struct {
@@ -228,11 +231,50 @@ func (it pickItem) indent() string {
 	}
 }
 
-func (it pickItem) hintSuffix() string {
-	if it.hint == "" {
-		return ""
+func padRight(s string, w int) string {
+	if n := w - len(s); n > 0 {
+		return s + strings.Repeat(" ", n)
 	}
-	return "  " + it.hint
+	return s
+}
+
+func (p *pickList) skillPad() (nameW, flagW, statusW int) {
+	for _, it := range p.items {
+		if it.kind != rowSkill {
+			continue
+		}
+		if n := len(it.label); n > nameW {
+			nameW = n
+		}
+		if n := len(it.invoke); n > flagW {
+			flagW = n
+		}
+		if n := len(it.status); n > statusW {
+			statusW = n
+		}
+	}
+	if nameW > 32 {
+		nameW = 32
+	}
+	return
+}
+
+func (p *pickList) skillAfterName(it pickItem) string {
+	_, flagW, statusW := p.skillPad()
+	var b strings.Builder
+	if flagW > 0 {
+		b.WriteString("  ")
+		b.WriteString(padRight(it.invoke, flagW))
+	}
+	if statusW > 0 {
+		b.WriteString("  ")
+		b.WriteString(padRight(it.status, statusW))
+	}
+	if it.hint != "" {
+		b.WriteString("  ")
+		b.WriteString(it.hint)
+	}
+	return b.String()
 }
 
 func (p *pickList) mark(ui style, it pickItem) string {
@@ -260,12 +302,20 @@ func (p *pickList) rowLine(ui style, i int) string {
 		cur = ui.cyan + "> " + ui.reset
 	}
 	label := it.label
+	rest := ""
 	if it.kind != rowSkill {
 		label = ui.bold + it.label + ui.reset
+		if it.hint != "" {
+			rest = "  " + it.hint
+		}
+	} else {
+		nameW, _, _ := p.skillPad()
+		label = padRight(it.label, nameW)
+		rest = p.skillAfterName(it)
 	}
 	hint := ""
-	if it.hint != "" {
-		hint = "  " + ui.dim + it.hint + ui.reset
+	if rest != "" {
+		hint = ui.dim + rest + ui.reset
 	}
 	line := cur + it.indent() + p.mark(ui, it) + " " + label + hint
 	if p.rowLocked(i) {
@@ -273,9 +323,28 @@ func (p *pickList) rowLine(ui style, i int) string {
 		if !it.on && it.kind == rowSkill {
 			mk = "[ ]"
 		}
-		line = ui.dim + "  " + it.indent() + mk + " " + it.label + it.hintSuffix() + ui.reset
+		lockedLabel := it.label
+		lockedRest := it.hint
+		if it.kind == rowSkill {
+			nameW, _, _ := p.skillPad()
+			lockedLabel = padRight(it.label, nameW)
+			lockedRest = p.skillAfterName(it)
+		} else if lockedRest != "" {
+			lockedRest = "  " + lockedRest
+		}
+		line = ui.dim + "  " + it.indent() + mk + " " + lockedLabel + lockedRest + ui.reset
 	}
 	return line
+}
+
+func (p *pickList) rowLines(ui style, i int) []string {
+	line := p.rowLine(ui, i)
+	it := p.items[i]
+	if it.kind != rowSkill || it.occ == "" {
+		return []string{line}
+	}
+	sub := ui.dim + "  " + it.indent() + "    " + occPrefix + it.occ + ui.reset
+	return []string{line, sub}
 }
 
 func (p *pickList) clipView(rows int) {
@@ -326,7 +395,7 @@ func (p *pickList) viewLines(ui style, height int) []string {
 		}
 	}
 	for i := start; i < end; i++ {
-		out = append(out, p.rowLine(ui, i))
+		out = append(out, p.rowLines(ui, i)...)
 	}
 	out = append(out, help)
 	if height > 0 && len(out) > height {
@@ -479,7 +548,7 @@ func (a *App) pickSkills(prompt string) ([]string, error) {
 	}
 	var skills []pickItem
 	for _, r := range a.catalogRows() {
-		skills = append(skills, pickItem{label: r.name, value: r.name, group: r.group, cat: r.cat, hint: r.blurb, on: true})
+		skills = append(skills, pickItem{label: r.name, value: r.name, group: r.group, cat: r.cat, invoke: r.invoke, hint: r.blurb, on: true})
 	}
 	p := nestPick(prompt, skills)
 	if err := a.runPick(p); err != nil {
@@ -518,20 +587,18 @@ func installPickable(cands []installCand) bool {
 }
 
 func installItem(c installCand) pickItem {
-	it := pickItem{label: c.name, value: c.name, cat: c.cat}
+	it := pickItem{label: c.name, value: c.name, cat: c.cat, invoke: c.invoke, hint: c.blurb}
 	switch c.kind {
 	case "have":
 		it.on = true
 		it.locked = true
-		it.hint = "installed"
+		it.status = "installed"
 	case "new":
 		it.on = true
-		it.hint = "new"
+		it.status = "new"
 	default:
-		it.hint = "override  " + c.occ
-	}
-	if c.blurb != "" {
-		it.hint += "  " + c.blurb
+		it.status = "override"
+		it.occ = c.occ
 	}
 	return it
 }

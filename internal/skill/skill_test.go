@@ -81,3 +81,33 @@ func TestCategory(t *testing.T) {
 		t.Fatalf("got %q", g)
 	}
 }
+
+func TestInvocation(t *testing.T) {
+	root := t.TempDir()
+	writeSkill(t, filepath.Join(root, "plain"), "plain")
+	user := filepath.Join(root, "user")
+	if err := os.MkdirAll(user, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "---\nname: user\ndescription: d\ndisable-model-invocation: true\n---\n"
+	if err := os.WriteFile(filepath.Join(user, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	falsy := filepath.Join(root, "falsy")
+	if err := os.MkdirAll(falsy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body = "---\nname: falsy\ndescription: d\ndisable-model-invocation: false\n---\n"
+	if err := os.WriteFile(filepath.Join(falsy, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if g := Invocation(filepath.Join(root, "plain")); g != "" {
+		t.Fatalf("plain: %q", g)
+	}
+	if g := Invocation(user); g != UserFlag {
+		t.Fatalf("user: %q", g)
+	}
+	if g := Invocation(falsy); g != "" {
+		t.Fatalf("falsy: %q", g)
+	}
+}

@@ -53,11 +53,7 @@ func frontmatterName(b []byte) string {
 }
 
 func Blurb(dir string) string {
-	b, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
-	if err != nil {
-		return ""
-	}
-	fm := extractFM(b)
+	fm := readFM(dir)
 	if fm == nil {
 		return ""
 	}
@@ -71,6 +67,40 @@ func Blurb(dir string) string {
 		s = strings.TrimSpace(s[:i])
 	}
 	return s
+}
+
+// UserFlag marks skills with disable-model-invocation: true.
+const UserFlag = "[user]"
+
+// Invocation is UserFlag when SKILL.md has disable-model-invocation: true, else "".
+func Invocation(dir string) string {
+	fm := readFM(dir)
+	if fm == nil {
+		return ""
+	}
+	v, ok := fm["disable-model-invocation"]
+	if !ok {
+		return ""
+	}
+	switch t := v.(type) {
+	case bool:
+		if t {
+			return UserFlag
+		}
+	default:
+		if strings.EqualFold(stringify(t), "true") {
+			return UserFlag
+		}
+	}
+	return ""
+}
+
+func readFM(dir string) map[string]any {
+	b, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+	if err != nil {
+		return nil
+	}
+	return extractFM(b)
 }
 
 func Shorten(s string, fancy bool) string {

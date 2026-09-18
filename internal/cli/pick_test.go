@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/formenosland/skillsync/internal/skill"
 )
 
 func TestDecodeKey(t *testing.T) {
@@ -78,7 +80,7 @@ func TestPickApply(t *testing.T) {
 
 func TestPickGroupAndCategory(t *testing.T) {
 	p := nestPick("remove?", []pickItem{
-		{label: "alpha", value: "alpha", group: "src-a", cat: "tools", on: true},
+		{label: "alpha", value: "alpha", group: "src-a", cat: "tools", invoke: skill.UserFlag, hint: "Alpha skill", on: true},
 		{label: "beta", value: "beta", group: "src-a", cat: "web", on: true},
 		{label: "gamma", value: "gamma", group: "src-b", cat: "", on: true},
 	})
@@ -88,6 +90,9 @@ func TestPickGroupAndCategory(t *testing.T) {
 	}
 	if !strings.Contains(body, "tools") || !strings.Contains(body, "web") {
 		t.Fatalf("categories: %s", body)
+	}
+	if !strings.Contains(body, skill.UserFlag) || !strings.Contains(body, "Alpha skill") {
+		t.Fatalf("invocation: %s", body)
 	}
 }
 
@@ -113,7 +118,7 @@ func TestPickToggleCategory(t *testing.T) {
 func TestPickInstallDefaults(t *testing.T) {
 	p := installPickList([]installCand{
 		{name: "keep", kind: "new", cat: "tools", blurb: "Keep skill description"},
-		{name: "clash", kind: "override", occ: "local", cat: "tools"},
+		{name: "clash", kind: "override", occ: "local", cat: "tools", invoke: skill.UserFlag},
 		{name: "other", kind: "new", cat: "web", blurb: "Other skill description"},
 	})
 	if got := strings.Join(p.selected(), " "); got != "keep other" {
@@ -123,11 +128,38 @@ func TestPickInstallDefaults(t *testing.T) {
 	if !strings.Contains(body, "tools") || !strings.Contains(body, "web") {
 		t.Fatalf("categories: %s", body)
 	}
-	if !strings.Contains(body, "override  local") || !strings.Contains(body, "new") {
+	if !strings.Contains(body, "override") || !strings.Contains(body, "local") || !strings.Contains(body, "new") {
 		t.Fatalf("hints: %s", body)
 	}
 	if !strings.Contains(body, "Keep skill description") || !strings.Contains(body, "Other skill description") {
 		t.Fatalf("blurbs: %s", body)
+	}
+	if !strings.Contains(body, skill.UserFlag) {
+		t.Fatalf("invocation: %s", body)
+	}
+	var keepLine, clashLine string
+	for _, line := range strings.Split(body, "\n") {
+		if strings.Contains(line, "keep") && strings.Contains(line, "new") {
+			keepLine = line
+		}
+		if strings.Contains(line, "clash") && strings.Contains(line, "override") {
+			clashLine = line
+		}
+	}
+	if keepLine == "" || clashLine == "" {
+		t.Fatalf("rows: %s", body)
+	}
+	if strings.Index(keepLine, "new") != strings.Index(clashLine, "override") {
+		t.Fatalf("status unaligned:\n%s\n%s", keepLine, clashLine)
+	}
+	var occLine string
+	for _, line := range strings.Split(body, "\n") {
+		if strings.Contains(line, "local") && !strings.Contains(line, "clash") {
+			occLine = line
+		}
+	}
+	if occLine == "" || !strings.Contains(occLine, occPrefix) || strings.Contains(occLine, "Keep skill") {
+		t.Fatalf("occupant line: %s", body)
 	}
 }
 

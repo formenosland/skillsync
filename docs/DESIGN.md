@@ -116,7 +116,7 @@ Sources are scanned for **exactly** these layouts (dot-directories at the source
 
 1. **Root export** — `SKILL.md` in the source root, or `<name>/SKILL.md` as an immediate child.
 2. **`skills/` folder** — `skills/<name>/SKILL.md`.
-3. **Categorized `skills/`** — `skills/<category>/<name>/SKILL.md` (for example [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills)). `list`, the `add` picker, and the `remove` picker group by `<category>` (and by occupying source). Picker space on a category or source row toggles every skill in that group.
+3. **Categorized `skills/`** — `skills/<category>/<name>/SKILL.md` (for example [mattpocock/skills](https://github.com/mattpocock/skills/tree/main/skills)). `list`, the `add` picker, and the `remove` picker group by `<category>` (and by occupying source). Skill rows mark `[user]` when `disable-model-invocation` is set. Picker space on a category or source row toggles every skill in that group.
 
 No other paths are skills (not `docs/…`, not `skills/<category>/<name>/…` deeper). The store and agent views stay **flat** (`<root>/<name>/SKILL.md`). The store name comes from the `name:` frontmatter field, falling back to the directory basename. If `add` finds no skills, it reports that and lists these layouts. Names must match the [Agent Skills](https://agentskills.io/specification) `name` rules: 1–64 characters, `/^[a-z0-9]+(-[a-z0-9]+)*$/` (lowercase, digits, single hyphens; no leading/trailing/consecutive hyphens). Unsafe names are skipped during materialize/migration and refused by `remove`.
 
@@ -137,7 +137,7 @@ Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud l
 | Situation | Resolution |
 |-----------|------------|
 | `add` unique name | Linked after picker / `--yes` |
-| `add` name already in store | Unchecked by default (`override`); `--yes` skips and warns |
+| `add` name already in store | Unchecked by default (`override`); next line shows `occupied by` plus the occupant path; `--yes` skips and warns |
 | `sync`, vacant, one provider | Link |
 | `sync`, vacant, two+ providers | Leave vacant; warn |
 | Occupied store name | Never retargeted by `sync` |
@@ -159,7 +159,7 @@ Non-filesystem vendors (e.g. Perplexity Computer, whose skills live in a cloud l
 | `remove` | Delete the skill's store symlink (visible everywhere instantly) and record the name in `excludes` so sync won't restore it. No backups — source files are never touched, so nothing is lost. Refuses unmanaged entries. Bare `remove` on a tty opens a checkbox picker grouped like `list`; without names, non-interactive use requires skill arguments or `--all` (`skillsync --yes remove --all` removes everything). |
 | `remove --all` | Remove every skill currently in the store (same per-skill semantics as `remove <name>`). |
 | `remove --source` | Drop the manifest entry, delete the clone (managed clones only — local folders are kept), remove its store links, re-materialize. |
-| `list` | On a tty: skills grouped by source, with the first line of each `description`. Piped / `--names` (`-1`): plain names for scripts and completion. `--pretty` forces the catalog when stdout is not a tty. |
+| `list` | On a tty: skills grouped by source, with `[user]` on skills that set `disable-model-invocation` and the first line of each `description`. Piped / `--names` (`-1`): plain names for scripts and completion. `--pretty` forces the catalog when stdout is not a tty. |
 | `status` | Dashboard: version, store/config paths, skill and source counts, source health vs last fetched origin (`up to date` / `behind` / `ahead` / `diverged` / `local` / `missing`; path sources: `path`). No network. Not a skill catalog (`list` is). |
 | `doctor` | Broken links, drifted views, wrong links, missing sources, unlinked installed agents, project apply drift/collisions. Exit 1 on actionable findings. |
 | `uninstall` | Reverse of init: remove all view symlinks (default), or convert views to real copies (`--keep`). `--purge` deletes all skillsync data after typing the confirmation word `nuke`; global `--yes` skips that prompt. |

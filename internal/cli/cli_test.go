@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/formenosland/skillsync/internal/skill"
 )
 
 func makeSkill(t *testing.T, dir, name string) {
@@ -220,7 +222,7 @@ func TestAddOccupancyAndList(t *testing.T) {
 	if strings.Contains(out, "skill(s)") || strings.Contains(out, "skillsync list") {
 		t.Fatal("tree chrome in pretty")
 	}
-	if strings.Contains(out, "  org") || strings.Contains(out, "  user") {
+	if strings.Contains(out, "  org") || strings.Contains(out, "\n  user\n") {
 		t.Fatal("layer labels")
 	}
 	out, _, _ = s.run("list", "--names")
@@ -267,6 +269,37 @@ func TestAddOccupancyAndList(t *testing.T) {
 	}
 	if !strings.Contains(out, "Agent views") {
 		t.Fatalf("status missing views: %s", out)
+	}
+}
+
+func TestListInvocation(t *testing.T) {
+	s := newSandbox(t)
+	src := filepath.Join(s.root, "src-inv")
+	makeSkill(t, filepath.Join(src, "plain"), "plain")
+	user := filepath.Join(src, "only-me")
+	if err := os.MkdirAll(user, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "---\nname: only-me\ndescription: user only\ndisable-model-invocation: true\n---\n"
+	if err := os.WriteFile(filepath.Join(user, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.yes("init")
+	if _, e, c := s.yes("add", src); c != 0 {
+		t.Fatal(e)
+	}
+	out, _, _ := s.run("list", "--pretty")
+	if !strings.Contains(out, "plain") || !strings.Contains(out, "only-me") || !strings.Contains(out, skill.UserFlag) {
+		t.Fatalf("want [user]: %s", out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "plain") && strings.Contains(line, skill.UserFlag) {
+			t.Fatalf("plain marked user: %s", line)
+		}
+	}
+	out, _, _ = s.run("list", "--names")
+	if strings.Contains(out, skill.UserFlag) || strings.Contains(out, "user only") {
+		t.Fatalf("names should stay names: %s", out)
 	}
 }
 

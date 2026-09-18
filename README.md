@@ -16,25 +16,35 @@ AI coding agents support [Agent Skills](https://agentskills.io) — but each one
 - Git repos are cloned; local folders are pointers. You pick which names to install.
 
 ```console
-$ skillsync add acme-corp/skills
-skillsync add https://github.com/acme-corp/skills
-  ✓ foo
-  ✓ bar
-add done (2 ok, 0 warnings)
+$ skillsync add https://github.com/mattpocock/skills
+install skills from this source?
+  [-] engineering
+    [x] ask-matt                       [user]  new       Ask which skill or flow fits your situation. …
+    [ ] code-review                            override  Review the changes since a fixed point …
+        occupied by github.com/formenosland/skills/skills/engineering/code-review
+    [x] codebase-design                        new       Shared vocabulary for designing deep modules. …
+    …
+  [x] productivity
+    [x] grill-me                       [user]  new       A relentless interview to sharpen a plan or design.
+    …
+  space toggle (incl. category)  a all  n none  enter accept  q abort
 
 $ skillsync list
-github.com/acme-corp/skills
-  foo             Foo skill description
-  bar             Bar skill description
+github.com/mattpocock/skills
+  ask-matt                       [user]  Ask which skill or flow fits your situation. …
+  codebase-design                        Shared vocabulary for designing deep modules. …
+github.com/formenosland/skills
+  code-review                            Review the changes since a fixed point …
 
 $ skillsync status
 skillsync 0.3.4
   store     ~/.local/share/skillsync/store
   config    ~/.config/skillsyncrc
-  skills    2 from 1 source
+  skills    41 from 2 sources
 
 Sources
-  up to date github.com/acme-corp/skills
+  up to date github.com/formenosland/skills
+  up to date github.com/mattpocock/skills
 
 Agent views
   linked     ~/.claude/skills        claude-code

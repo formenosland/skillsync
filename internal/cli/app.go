@@ -480,7 +480,7 @@ func (a *App) interactive() bool {
 }
 
 type installCand struct {
-	name, dir, kind, occ, cat, blurb string
+	name, dir, kind, occ, cat, invoke, blurb string
 }
 
 func (a *App) readLine() (string, error) {
