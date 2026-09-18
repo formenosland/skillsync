@@ -40,7 +40,7 @@ func (a *App) cmdApply(args []string) error {
 	if err != nil {
 		return err
 	}
-	a.header("skillsync apply " + man)
+	a.info(man)
 	if !a.Yes && !a.DryRun {
 		if !a.interactive() {
 			return fmt.Errorf("non-interactive apply requires --yes")
@@ -91,7 +91,6 @@ func (a *App) cmdUnapply(args []string) error {
 	if err != nil {
 		return err
 	}
-	a.header("skillsync unapply")
 	views, err := a.projectViews(root, proj)
 	if err != nil {
 		return err

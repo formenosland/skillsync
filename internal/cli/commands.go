@@ -18,7 +18,6 @@ func (a *App) cmdInit(args []string) error {
 	if len(args) > 0 {
 		return fmt.Errorf("unexpected argument: %s", args[0])
 	}
-	a.header("skillsync init")
 	a.info("store:  " + a.layout.Store)
 	a.info("config: " + a.layout.ConfigFile)
 	if err := a.do("mkdir data", func() error {
@@ -213,13 +212,24 @@ func (a *App) cmdSync(args []string) error {
 	if len(args) > 0 {
 		return fmt.Errorf("unexpected argument: %s", args[0])
 	}
-	a.header("skillsync sync")
 	for _, src := range a.cfg.Sources {
 		if !gitx.IsGitURL(src) {
+			a.info("path " + a.sourceHeading(src))
 			continue
 		}
-		if err := a.fetchSource(src); err != nil {
-			a.warn("could not update source: " + src + " (continuing)")
+		if a.DryRun {
+			a.info("[dry-run] fetch " + a.sourceHeading(src))
+			continue
+		}
+		updated, err := gitx.PullSource(a.layout.SourcesDir, src)
+		if err != nil {
+			a.warn("could not update " + a.sourceHeading(src) + ": " + err.Error() + " (continuing)")
+			continue
+		}
+		if updated {
+			a.ok("updated " + a.sourceHeading(src))
+		} else {
+			a.info("up to date " + a.sourceHeading(src))
 		}
 	}
 	if err := a.materialize(); err != nil {
@@ -395,7 +405,6 @@ func (a *App) cmdRemove(args []string) error {
 		}
 		names = picked
 	}
-	a.header("skillsync remove")
 	for _, n := range names {
 		if n == "" {
 			continue
@@ -561,7 +570,6 @@ func (a *App) cmdStatus(args []string) error {
 }
 
 func (a *App) cmdDoctor(args []string) error {
-	a.header("skillsync doctor")
 	issues := 0
 	ents, _ := os.ReadDir(a.layout.Store)
 	for _, e := range ents {
@@ -626,7 +634,6 @@ func (a *App) cmdUninstall(args []string) error {
 			return fmt.Errorf("unexpected argument: %s", arg)
 		}
 	}
-	a.header("skillsync uninstall")
 	for _, v := range a.views() {
 		if a.viewIsNative(v.Path) {
 			continue

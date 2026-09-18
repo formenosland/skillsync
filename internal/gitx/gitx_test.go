@@ -83,6 +83,76 @@ func TestSyncStateAheadBehind(t *testing.T) {
 	}
 }
 
+func TestPullCloneFastForwardsBranch(t *testing.T) {
+	src := t.TempDir()
+	sr, err := git.PlainInit(src, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustCommit(t, sr, src, "one")
+	clone := t.TempDir()
+	if _, err := git.PlainClone(clone, false, &git.CloneOptions{URL: src}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "f"), []byte("two"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustCommit(t, sr, src, "two")
+	updated, err := pullClone(clone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated {
+		t.Fatal("expected worktree update")
+	}
+	b, err := os.ReadFile(filepath.Join(clone, "f"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != "two" {
+		t.Fatalf("worktree not updated: %q", b)
+	}
+}
+
+func TestPullCloneUpdatesDetachedHEAD(t *testing.T) {
+	src := t.TempDir()
+	sr, err := git.PlainInit(src, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h1 := mustCommit(t, sr, src, "one")
+	clone := t.TempDir()
+	cr, err := git.PlainClone(clone, false, &git.CloneOptions{URL: src})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cw, err := cr.Worktree()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cw.Checkout(&git.CheckoutOptions{Hash: h1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "f"), []byte("two"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustCommit(t, sr, src, "two")
+	updated, err := pullClone(clone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !updated {
+		t.Fatal("expected detached clone to follow origin")
+	}
+	b, err := os.ReadFile(filepath.Join(clone, "f"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != "two" {
+		t.Fatalf("worktree not updated: %q", b)
+	}
+}
+
 func mustCommit(t *testing.T, r *git.Repository, dir, msg string) plumbing.Hash {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, "f"), []byte(msg), 0o644); err != nil {

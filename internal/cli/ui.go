@@ -47,10 +47,6 @@ func mutedColor() string {
 	return "\033[38;5;146m"
 }
 
-func (a *App) header(msg string) {
-	fmt.Fprintln(a.Stderr, a.ui.bold+msg+a.ui.reset)
-}
-
 func (a *App) ok(msg string) {
 	a.nOK++
 	fmt.Fprintf(a.Stderr, "  %s%s%s %s\n", a.ui.green, a.ui.ok, a.ui.reset, msg)

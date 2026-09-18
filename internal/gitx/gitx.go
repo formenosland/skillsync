@@ -9,6 +9,7 @@ import (
 
 	"github.com/formenosland/skillsync/internal/paths"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 )
 
@@ -91,18 +92,7 @@ func CloneOrPull(sourcesDir, raw string) error {
 	}
 	remote := NormalizeGitURL(raw)
 	if _, err := os.Stat(filepath.Join(dest, ".git")); err == nil {
-		r, err := git.PlainOpen(dest)
-		if err != nil {
-			return err
-		}
-		w, err := r.Worktree()
-		if err != nil {
-			return err
-		}
-		err = w.Pull(&git.PullOptions{RemoteName: "origin"})
-		if err == nil || err == git.NoErrAlreadyUpToDate {
-			return nil
-		}
+		_, err := pullClone(dest)
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
@@ -112,6 +102,76 @@ func CloneOrPull(sourcesDir, raw string) error {
 		URL: remote,
 	})
 	return err
+}
+
+// PullSource fetches origin and resets the worktree to the remote default
+// (or the current branch's upstream). Returns whether the worktree moved.
+func PullSource(sourcesDir, raw string) (updated bool, err error) {
+	dest, err := CloneDir(sourcesDir, raw)
+	if err != nil {
+		return false, err
+	}
+	if _, err := os.Stat(filepath.Join(dest, ".git")); err != nil {
+		if err := CloneOrPull(sourcesDir, raw); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return pullClone(dest)
+}
+
+func pullClone(dest string) (bool, error) {
+	r, err := git.PlainOpen(dest)
+	if err != nil {
+		return false, err
+	}
+	err = r.Fetch(&git.FetchOptions{
+		RemoteName: "origin",
+		Force:      true,
+		Tags:       git.AllTags,
+		RefSpecs: []config.RefSpec{
+			"+refs/heads/*:refs/remotes/origin/*",
+		},
+	})
+	if err != nil && err != git.NoErrAlreadyUpToDate {
+		return false, err
+	}
+	w, err := r.Worktree()
+	if err != nil {
+		return false, err
+	}
+	head, err := r.Head()
+	if err != nil {
+		return false, nil
+	}
+	want, ok := originTip(r, head)
+	if !ok || head.Hash() == want {
+		return false, nil
+	}
+	if err := w.Reset(&git.ResetOptions{Commit: want, Mode: git.HardReset}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func originTip(r *git.Repository, head *plumbing.Reference) (plumbing.Hash, bool) {
+	if head != nil && head.Name().IsBranch() {
+		ref, err := r.Reference(plumbing.NewRemoteReferenceName("origin", head.Name().Short()), true)
+		if err == nil && !ref.Hash().IsZero() {
+			return ref.Hash(), true
+		}
+	}
+	for _, rev := range []plumbing.Revision{
+		"refs/remotes/origin/HEAD",
+		"refs/remotes/origin/main",
+		"refs/remotes/origin/master",
+	} {
+		h, err := r.ResolveRevision(rev)
+		if err == nil && !h.IsZero() {
+			return *h, true
+		}
+	}
+	return plumbing.ZeroHash, false
 }
 
 // CheckoutRef checks out a branch, tag, or commit in an existing clone.
@@ -135,9 +195,9 @@ func CheckoutRef(cloneDir, ref string) error {
 		}
 	}
 	for _, n := range []plumbing.ReferenceName{
-		plumbing.NewBranchReferenceName(ref),
-		plumbing.NewTagReferenceName(ref),
 		plumbing.NewRemoteReferenceName("origin", ref),
+		plumbing.NewTagReferenceName(ref),
+		plumbing.NewBranchReferenceName(ref),
 	} {
 		if err := w.Checkout(&git.CheckoutOptions{Branch: n, Force: true}); err == nil {
 			return nil
