@@ -23,7 +23,7 @@ import (
 var errHelpOrVersion = errors.New("handled")
 
 // Version is set by the maintainer (not by this rewrite).
-const Version = "1.2.1"
+const Version = "1.3.0"
 
 type App struct {
 	Args   []string
