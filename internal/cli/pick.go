@@ -17,6 +17,8 @@ const (
 	keyNone keyAction = iota
 	keyUp
 	keyDown
+	keyPageUp
+	keyPageDown
 	keyToggle
 	keyAll
 	keyNoneAll
@@ -42,6 +44,8 @@ type pickList struct {
 	prompt string
 	items  []pickItem
 	cursor int
+	view   int // first visible item
+	page   int // visible item rows (for PgUp/PgDn)
 }
 
 func (p *pickList) apply(k keyAction) (done, abort bool) {
@@ -57,6 +61,18 @@ func (p *pickList) apply(k keyAction) (done, abort bool) {
 		p.move(-1)
 	case keyDown:
 		p.move(1)
+	case keyPageUp:
+		n := p.page
+		if n < 1 {
+			n = 1
+		}
+		p.move(-n)
+	case keyPageDown:
+		n := p.page
+		if n < 1 {
+			n = 1
+		}
+		p.move(n)
 	case keyToggle:
 		p.toggleAt(p.cursor)
 	case keyAll:
@@ -237,32 +253,85 @@ func (p *pickList) mark(ui style, it pickItem) string {
 	return ui.dim + "[ ]" + ui.reset
 }
 
-func (p *pickList) lines(ui style) []string {
-	out := []string{ui.bold + p.prompt + ui.reset}
-	for i, it := range p.items {
-		cur := "  "
-		if i == p.cursor {
-			cur = ui.cyan + "> " + ui.reset
-		}
-		label := it.label
-		if it.kind != rowSkill {
-			label = ui.bold + it.label + ui.reset
-		}
-		hint := ""
-		if it.hint != "" {
-			hint = "  " + ui.dim + it.hint + ui.reset
-		}
-		line := cur + it.indent() + p.mark(ui, it) + " " + label + hint
-		if p.rowLocked(i) {
-			mk := "[x]"
-			if !it.on && it.kind == rowSkill {
-				mk = "[ ]"
-			}
-			line = ui.dim + "  " + it.indent() + mk + " " + it.label + it.hintSuffix() + ui.reset
-		}
-		out = append(out, line)
+func (p *pickList) rowLine(ui style, i int) string {
+	it := p.items[i]
+	cur := "  "
+	if i == p.cursor {
+		cur = ui.cyan + "> " + ui.reset
 	}
-	out = append(out, "  "+ui.dim+"space toggle (incl. category)  a all  n none  enter accept  q abort"+ui.reset)
+	label := it.label
+	if it.kind != rowSkill {
+		label = ui.bold + it.label + ui.reset
+	}
+	hint := ""
+	if it.hint != "" {
+		hint = "  " + ui.dim + it.hint + ui.reset
+	}
+	line := cur + it.indent() + p.mark(ui, it) + " " + label + hint
+	if p.rowLocked(i) {
+		mk := "[x]"
+		if !it.on && it.kind == rowSkill {
+			mk = "[ ]"
+		}
+		line = ui.dim + "  " + it.indent() + mk + " " + it.label + it.hintSuffix() + ui.reset
+	}
+	return line
+}
+
+func (p *pickList) clipView(rows int) {
+	n := len(p.items)
+	if rows < 1 {
+		rows = 1
+	}
+	p.page = rows
+	if n <= rows {
+		p.view = 0
+		return
+	}
+	if p.cursor < p.view {
+		p.view = p.cursor
+	}
+	if p.cursor >= p.view+rows {
+		p.view = p.cursor - rows + 1
+	}
+	if p.view < 0 {
+		p.view = 0
+	}
+	if max := n - rows; p.view > max {
+		p.view = max
+	}
+}
+
+func (p *pickList) lines(ui style) []string {
+	return p.viewLines(ui, 0)
+}
+
+func (p *pickList) viewLines(ui style, height int) []string {
+	help := "  " + ui.dim + "space toggle (incl. category)  a all  n none  enter accept  q abort" + ui.reset
+	out := []string{ui.bold + p.prompt + ui.reset}
+	n := len(p.items)
+	start, end := 0, n
+	if height > 0 {
+		rows := height - 2
+		if rows < 1 {
+			rows = 1
+		}
+		p.clipView(rows)
+		start, end = p.view, p.view+rows
+		if end > n {
+			end = n
+		}
+		if start > 0 || end < n {
+			help = "  " + ui.dim + "↑↓ pgup/pgdn  space toggle  a all  n none  enter accept  q abort" + ui.reset
+		}
+	}
+	for i := start; i < end; i++ {
+		out = append(out, p.rowLine(ui, i))
+	}
+	out = append(out, help)
+	if height > 0 && len(out) > height {
+		out = out[:height]
+	}
 	return out
 }
 
@@ -292,6 +361,14 @@ func decodeKey(b []byte) keyAction {
 				return keyUp
 			case 'B':
 				return keyDown
+			case '5':
+				if len(b) >= 4 && b[3] == '~' {
+					return keyPageUp
+				}
+			case '6':
+				if len(b) >= 4 && b[3] == '~' {
+					return keyPageDown
+				}
 			}
 		}
 		if len(b) == 1 {
@@ -319,7 +396,7 @@ func readKey(in *os.File) (keyAction, error) {
 		return decodeKey(first[:]), nil
 	}
 	_ = in.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
-	rest := make([]byte, 2)
+	rest := make([]byte, 3)
 	n, _ := in.Read(rest)
 	_ = in.SetReadDeadline(time.Time{})
 	return decodeKey(append(first[:], rest[:n]...)), nil
@@ -337,19 +414,38 @@ func (a *App) runPick(p *pickList) error {
 	}
 	defer func() {
 		_ = term.Restore(fd, st)
-		fmt.Fprint(a.Stderr, "\033[?25h")
+		fmt.Fprint(a.Stderr, "\n\033[?25h")
 	}()
 	fmt.Fprint(a.Stderr, "\033[?25l")
+	height := 24
+	if f, ok := a.Stderr.(*os.File); ok {
+		if _, h, err := term.GetSize(int(f.Fd())); err == nil && h > 0 {
+			height = h
+		}
+	}
 	painted := 0
+	erase := func() {
+		if painted <= 0 {
+			return
+		}
+		if painted == 1 {
+			fmt.Fprint(a.Stderr, "\r\033[J")
+			return
+		}
+		fmt.Fprintf(a.Stderr, "\r\033[%dA\033[J", painted-1)
+	}
 	paint := func() {
-		if painted > 0 {
-			fmt.Fprintf(a.Stderr, "\r\033[%dA\033[J", painted)
+		erase()
+		ls := p.viewLines(a.ui, height)
+		n := len(ls)
+		for i, l := range ls {
+			if i == n-1 {
+				fmt.Fprintf(a.Stderr, "%s\r", l)
+			} else {
+				fmt.Fprintf(a.Stderr, "%s\r\n", l)
+			}
 		}
-		ls := p.lines(a.ui)
-		for _, l := range ls {
-			fmt.Fprintf(a.Stderr, "%s\r\n", l)
-		}
-		painted = len(ls)
+		painted = n
 	}
 	paint()
 	for {

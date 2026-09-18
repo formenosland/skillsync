@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 )
 
 type style struct {
@@ -16,7 +18,7 @@ func newStyle(stderrTTY bool) style {
 	if stderrTTY && os.Getenv("NO_COLOR") == "" && os.Getenv("TERM") != "dumb" {
 		s.reset = "\033[0m"
 		s.bold = "\033[1m"
-		s.dim = "\033[2m"
+		s.dim = mutedColor()
 		s.red = "\033[31m"
 		s.green = "\033[32m"
 		s.yellow = "\033[33m"
@@ -25,6 +27,24 @@ func newStyle(stderrTTY bool) style {
 		s.fancy = true
 	}
 	return s
+}
+
+// mutedColor is secondary text that stays readable on glass/transparent
+// terminals. SGR 2 (faint) multiplies the cell against the background and
+// often disappears there. COLORFGBG (xterm/konsole) picks a light vs dark tone.
+func mutedColor() string {
+	bg := -1
+	if v := os.Getenv("COLORFGBG"); v != "" {
+		if i := strings.LastIndex(v, ";"); i >= 0 {
+			if n, err := strconv.Atoi(v[i+1:]); err == nil {
+				bg = n
+			}
+		}
+	}
+	if bg >= 8 {
+		return "\033[38;5;60m"
+	}
+	return "\033[38;5;146m"
 }
 
 func (a *App) header(msg string) {

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -21,6 +22,8 @@ func TestDecodeKey(t *testing.T) {
 		{[]byte{'k'}, keyUp},
 		{[]byte{0x1b, '[', 'A'}, keyUp},
 		{[]byte{0x1b, '[', 'B'}, keyDown},
+		{[]byte{0x1b, '[', '5', '~'}, keyPageUp},
+		{[]byte{0x1b, '[', '6', '~'}, keyPageDown},
 		{[]byte{0xe0, 0x48}, keyUp},
 		{[]byte{'z'}, keyNone},
 	}
@@ -153,6 +156,36 @@ func TestPickLockedInstalled(t *testing.T) {
 	}
 	if installPickable([]installCand{{kind: "have"}}) {
 		t.Fatal("all have")
+	}
+}
+
+func TestPickViewport(t *testing.T) {
+	var skills []pickItem
+	for i := 0; i < 20; i++ {
+		n := fmt.Sprintf("s%02d", i)
+		skills = append(skills, pickItem{label: n, value: n, on: true})
+	}
+	p := nestPick("pick?", skills)
+	ls := p.viewLines(style{}, 5)
+	if len(ls) != 5 {
+		t.Fatalf("height cap %d: %v", len(ls), ls)
+	}
+	body := strings.Join(ls, "\n")
+	if !strings.Contains(body, "pick?") || !strings.Contains(body, "s00") {
+		t.Fatalf("top of window: %s", body)
+	}
+	if strings.Contains(body, "s19") {
+		t.Fatalf("overflowed: %s", body)
+	}
+	p.page = 3
+	p.apply(keyPageDown)
+	ls = p.viewLines(style{}, 5)
+	body = strings.Join(ls, "\n")
+	if p.cursor < 3 {
+		t.Fatalf("page down cursor %d", p.cursor)
+	}
+	if !strings.Contains(body, p.items[p.cursor].label) {
+		t.Fatalf("cursor row missing: cursor=%d %s", p.cursor, body)
 	}
 }
 
